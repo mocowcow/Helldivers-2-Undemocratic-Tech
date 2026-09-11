@@ -79,3 +79,27 @@ class BindingManager:
     def clear(self):
         for key in tuple(self._bindings):
             self.unbind(key)
+
+    def replace(self, bindings):
+        """Replace the complete set, restoring previous registrations on failure."""
+        normalized = []
+        keys = set()
+        for binding in bindings:
+            key = binding.key.strip().lower()
+            if not key or key in keys:
+                raise ValueError(f"Empty or duplicate hotkey: {key}")
+            self._callback(binding)
+            keyboard.parse_hotkey_combinations(key)
+            keys.add(key)
+            normalized.append(Binding(key, binding.action, binding.value))
+
+        previous = self.bindings
+        try:
+            self.clear()
+            for binding in normalized:
+                self.bind(binding)
+        except Exception:
+            self.clear()
+            for binding in previous:
+                self.bind(binding)
+            raise
