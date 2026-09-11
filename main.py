@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pydirectinput as pdi
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from actions import send_chat
@@ -11,6 +14,7 @@ from settings import DEFAULT_STRATAGEM_BINDINGS, effective_bindings, load_bindin
 
 def main():
     app = QApplication([])
+    app.setWindowIcon(QIcon(str(Path(__file__).resolve().with_name("icon.ico"))))
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
     bindings = BindingManager(chat_input.request)

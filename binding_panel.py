@@ -13,7 +13,7 @@ class BindingPanel(QWidget):
     def __init__(self, manager, bindings, load_error=""):
         super().__init__()
         self.manager = manager
-        self.setWindowTitle("HD2 綁定設定")
+        self.setWindowTitle("HD2 Undemocratic Tech")
         self.resize(720, 440)
         layout = QVBoxLayout(self)
         buttons = QHBoxLayout()
