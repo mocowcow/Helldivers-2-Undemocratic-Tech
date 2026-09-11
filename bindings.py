@@ -8,9 +8,12 @@ from stratagems import STRATAGEMS
 
 
 def bind_key(key, callback):
-    return keyboard.add_hotkey(
-        key, callback, suppress=True, trigger_on_release=True,
-    )
+    def handler(event):
+        if event.event_type == keyboard.KEY_UP:
+            callback()
+        return False
+
+    return keyboard.hook_key(key, handler, suppress=True)
 
 
 def bind_stragem(key, stratagem):
