@@ -8,9 +8,9 @@ from actions import send_chat
 from binding_panel import BindingPanel
 from bindings import BindingManager
 from chat_input import ChatInput
-from defaults import INPUT_PAUSE
+from defaults import DEFAULT_BINDINGS, INPUT_PAUSE
 from foreground import ForegroundMonitor, is_game_foreground
-from settings import DEFAULT_STRATAGEM_BINDINGS, effective_bindings, load_bindings
+from settings import effective_bindings, load_bindings
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
     try:
         saved_bindings = load_bindings()
     except (OSError, ValueError) as error:
-        saved_bindings = DEFAULT_STRATAGEM_BINDINGS
+        saved_bindings = DEFAULT_BINDINGS
         load_error = str(error)
 
     try:

@@ -1,0 +1,124 @@
+import keyboard
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QKeySequence
+from PySide6.QtWidgets import QLineEdit
+
+
+KEY_NAMES = {
+    Qt.Key.Key_Return: "enter", Qt.Key.Key_Enter: "enter",
+    Qt.Key.Key_Space: "space", Qt.Key.Key_Backspace: "backspace",
+    Qt.Key.Key_Delete: "delete", Qt.Key.Key_Insert: "insert",
+    Qt.Key.Key_PageUp: "page up", Qt.Key.Key_PageDown: "page down",
+    Qt.Key.Key_Control: "ctrl", Qt.Key.Key_Shift: "shift",
+    Qt.Key.Key_Alt: "alt", Qt.Key.Key_Meta: "windows",
+    Qt.Key.Key_CapsLock: "caps lock", Qt.Key.Key_NumLock: "num lock",
+    Qt.Key.Key_ScrollLock: "scroll lock", Qt.Key.Key_Print: "print screen",
+}
+
+
+class KeyInput(QLineEdit):
+    changed = Signal()
+
+    def __init__(self, key=""):
+        super().__init__()
+        self.key = key
+        self.capturing = False
+        self.pressed = set()
+        self.candidate = ""
+        self.setReadOnly(True)
+        self.setMinimumWidth(150)
+        self.setToolTip("點擊後按下單一按鍵；放開確定，Esc 清除綁定。")
+        self.show_key()
+
+    def show_key(self):
+        self.setText(self.key.upper() if self.key else "未綁定")
+
+    def begin_capture(self):
+        self.capturing = True
+        self.pressed.clear()
+        self.candidate = ""
+        self.setText("請按下快捷鍵")
+
+    def cancel_capture(self):
+        self.capturing = False
+        self.pressed.clear()
+        self.candidate = ""
+        self.show_key()
+
+    def clear_binding(self):
+        previous = self.key
+        self.key = ""
+        self.cancel_capture()
+        if previous:
+            self.changed.emit()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.begin_capture()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.begin_capture()
+
+    def focusOutEvent(self, event):
+        self.cancel_capture()
+        super().focusOutEvent(event)
+
+    def event(self, event):
+        # Handle Tab here so QWidget does not move focus before capture.
+        if getattr(self, "capturing", False):
+            if event.type() == QEvent.Type.ShortcutOverride:
+                event.accept()
+                return True
+            if event.type() == QEvent.Type.KeyPress:
+                self.keyPressEvent(event)
+                return True
+            if event.type() == QEvent.Type.KeyRelease:
+                self.keyReleaseEvent(event)
+                return True
+        return super().event(event)
+
+    def keyPressEvent(self, event):
+        event.accept()
+        if not self.capturing or event.isAutoRepeat():
+            return
+        if event.key() == Qt.Key.Key_Escape:
+            self.clear_binding()
+            return
+        self.pressed.add(event.key())
+        modifiers = event.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
+        own_modifier = {
+            Qt.Key.Key_Control: Qt.KeyboardModifier.ControlModifier,
+            Qt.Key.Key_Shift: Qt.KeyboardModifier.ShiftModifier,
+            Qt.Key.Key_Alt: Qt.KeyboardModifier.AltModifier,
+            Qt.Key.Key_Meta: Qt.KeyboardModifier.MetaModifier,
+        }.get(event.key(), Qt.KeyboardModifier.NoModifier)
+        if len(self.pressed) > 1 or modifiers & ~own_modifier:
+            self.candidate = ""
+            self.setText("僅支援單一按鍵")
+            return
+        name = KEY_NAMES.get(event.key())
+        if name is None:
+            name = QKeySequence(event.key()).toString(QKeySequence.SequenceFormat.PortableText).lower()
+        try:
+            if not name or not keyboard.key_to_scan_codes(name):
+                raise ValueError("Unsupported key")
+        except (ValueError, KeyError):
+            self.candidate = ""
+            self.setText("不支援此按鍵，請重試")
+            return
+        self.candidate = name
+        self.setText(name.upper())
+
+    def keyReleaseEvent(self, event):
+        event.accept()
+        if not self.capturing or event.isAutoRepeat():
+            return
+        self.pressed.discard(event.key())
+        if self.pressed or not self.candidate:
+            return
+        previous = self.key
+        self.key = self.candidate
+        self.cancel_capture()
+        if self.key != previous:
+            self.changed.emit()

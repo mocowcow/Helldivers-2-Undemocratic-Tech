@@ -85,8 +85,8 @@ class BindingManager:
             raise ValueError("Hotkey must not be empty")
         binding = Binding(key, binding.action, binding.value)
         self._callback(binding)
-        # Validate syntax before removing an existing registration.
-        keyboard.parse_hotkey_combinations(key)
+        # Validate the single key before removing an existing registration.
+        keyboard.key_to_scan_codes(key)
         previous = self._bindings.get(key)
         self.unbind(key)
         try:
@@ -121,7 +121,7 @@ class BindingManager:
             if not key or key in keys:
                 raise ValueError(f"Empty or duplicate hotkey: {key}")
             self._callback(binding)
-            keyboard.parse_hotkey_combinations(key)
+            keyboard.key_to_scan_codes(key)
             keys.add(key)
             normalized.append(Binding(key, binding.action, binding.value))
 
