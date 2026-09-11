@@ -1,5 +1,4 @@
 import pydirectinput as pdi
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from actions import send_chat
@@ -27,8 +26,6 @@ def main():
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error)
         panel.show()
-        # Initialize chat focus after the control panel has been shown.
-        QTimer.singleShot(250, chat_input.initialize)
         return app.exec()
     finally:
         bindings.clear()

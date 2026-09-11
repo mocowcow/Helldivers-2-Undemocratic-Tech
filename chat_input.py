@@ -4,7 +4,7 @@ from threading import Event
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
-from PySide6.QtWidgets import QApplication, QLineEdit
+from PySide6.QtWidgets import QLineEdit
 
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -22,8 +22,7 @@ kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 
 def activate_foreground(hwnd):
-    result = user32.SetForegroundWindow(hwnd)
-    print(f"[chat-focus] SetForegroundWindow={bool(result)}", flush=True)
+    user32.SetForegroundWindow(hwnd)
     if user32.GetForegroundWindow() == hwnd:
         user32.SetFocus(hwnd)
         return
@@ -34,17 +33,14 @@ def activate_foreground(hwnd):
     if not foreground_thread or foreground_thread == current_thread:
         return
     attached = user32.AttachThreadInput(current_thread, foreground_thread, True)
-    print(f"[chat-focus] AttachThreadInput={bool(attached)}", flush=True)
     if not attached:
         return
     try:
-        result = user32.SetForegroundWindow(hwnd)
-        print(f"[chat-focus] foreground-retry={bool(result)}", flush=True)
+        user32.SetForegroundWindow(hwnd)
         if user32.GetForegroundWindow() == hwnd:
             user32.SetFocus(hwnd)
     finally:
-        detached = user32.AttachThreadInput(current_thread, foreground_thread, False)
-        print(f"[chat-focus] detached={bool(detached)}", flush=True)
+        user32.AttachThreadInput(current_thread, foreground_thread, False)
 
 
 class ChatInput(QLineEdit):
@@ -56,8 +52,6 @@ class ChatInput(QLineEdit):
         self.active = Event()
         self.target = None
         self.composing = False
-        self.initializing = False
-        self.activating = False
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
@@ -67,24 +61,8 @@ class ChatInput(QLineEdit):
         self.open_requested.connect(
             self.open_input, Qt.ConnectionType.QueuedConnection)
 
-    def initialize(self):
-        self.initializing = True
-        self.active.set()
-        self.open_input(user32.GetForegroundWindow())
-        QTimer.singleShot(200, self.finish_initialization)
-
-    def finish_initialization(self):
-        self.log_focus("initialization-finished")
-        focused = user32.GetForegroundWindow() == int(self.winId())
-        self.hide()
-        if focused and self.target:
-            user32.SetForegroundWindow(self.target)
-        self.initializing = False
-        self.active.clear()
-
     def request(self):
         # Global keyboard callbacks must not manipulate Qt widgets directly.
-        print(f"[chat-focus] request busy={self.active.is_set()}", flush=True)
         if not self.active.is_set():
             self.active.set()
             self.open_requested.emit(user32.GetForegroundWindow())
@@ -105,58 +83,18 @@ class ChatInput(QLineEdit):
 
     def show_and_focus(self):
         self.active.set()
-        self.activating = True
-        self.log_focus("before-show")
         self.show()
         self.raise_()
         self.activateWindow()
         activate_foreground(int(self.winId()))
         if user32.GetForegroundWindow() == int(self.winId()):
             self.setFocus(Qt.FocusReason.OtherFocusReason)
-        self.log_focus("after-focus")
-        QTimer.singleShot(0, self.finish_activation)
-
-    def finish_activation(self):
-        self.activating = False
-        self.log_focus("next-event-loop")
-        if self.isVisible() and user32.GetForegroundWindow() != int(self.winId()):
-            self.hide()
-            if not self.initializing:
-                self.active.clear()
-            print("[chat-focus] activation-failed; input cancelled", flush=True)
-
-    def log_focus(self, stage):
-        window = QApplication.activeWindow()
-        hwnd = int(self.winId()) if self.windowHandle() is not None else None
-        print(
-            f"[chat-focus] {stage} initializing={self.initializing} "
-            f"hwnd={hwnd} foreground={user32.GetForegroundWindow()} "
-            f"visible={self.isVisible()} active={self.isActiveWindow()} "
-            f"focus={self.hasFocus()} "
-            f"qt_window={type(window).__name__ if window else None}",
-            flush=True,
-        )
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        self.log_focus(f"focus-in reason={event.reason().name}")
 
     def inputMethodEvent(self, event):
         self.composing = bool(event.preeditString())
         super().inputMethodEvent(event)
 
-    def focusOutEvent(self, event):
-        self.log_focus(f"focus-out reason={event.reason().name}")
-        super().focusOutEvent(event)
-        if self.isVisible() and not self.activating:
-            self.hide()
-            if not self.initializing:
-                self.active.clear()
-
     def keyPressEvent(self, event):
-        if self.initializing:
-            event.accept()
-            return
         if event.key() == Qt.Key.Key_Escape:
             self.cancel()
             event.accept()
