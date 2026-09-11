@@ -9,6 +9,7 @@ from binding_panel import BindingPanel
 from bindings import BindingManager
 from chat_input import ChatInput
 from defaults import INPUT_PAUSE
+from foreground import ForegroundMonitor, is_game_foreground
 from settings import DEFAULT_STRATAGEM_BINDINGS, effective_bindings, load_bindings
 
 
@@ -17,7 +18,8 @@ def main():
     app.setWindowIcon(QIcon(str(Path(__file__).resolve().with_name("icon.ico"))))
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
-    bindings = BindingManager(chat_input.request)
+    bindings = BindingManager(chat_input.request, is_game_foreground)
+    foreground = ForegroundMonitor(bindings)
     load_error = ""
     try:
         saved_bindings = load_bindings()
@@ -30,9 +32,13 @@ def main():
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error)
         panel.show()
+        foreground.start()
         return app.exec()
     finally:
-        bindings.clear()
+        try:
+            foreground.stop()
+        finally:
+            bindings.clear()
 
 
 if __name__ == "__main__":

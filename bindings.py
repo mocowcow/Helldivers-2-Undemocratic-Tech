@@ -29,14 +29,42 @@ class Binding:
 
 
 class BindingManager:
-    def __init__(self, open_chat):
+    def __init__(self, open_chat, can_trigger=None):
         self.open_chat = open_chat
+        self.can_trigger = can_trigger
+        self._enabled = False
         self._bindings = {}
         self._removers = {}
 
     @property
     def bindings(self):
         return tuple(self._bindings.values())
+
+    def _register(self, binding):
+        callback = self._callback(binding)
+
+        def invoke():
+            if self._enabled and (self.can_trigger is None or self.can_trigger()):
+                callback()
+
+        return bind_key(binding.key, invoke)
+
+    def enable(self):
+        if self._enabled:
+            return
+        try:
+            for binding in self._bindings.values():
+                self._removers[binding.key] = self._register(binding)
+        except Exception:
+            self.disable()
+            raise
+        self._enabled = True
+
+    def disable(self):
+        self._enabled = False
+        for key in tuple(self._removers):
+            self._removers[key]()
+            del self._removers[key]
 
     def _callback(self, binding):
         if binding.action == "stratagem":
@@ -53,19 +81,20 @@ class BindingManager:
         if not key:
             raise ValueError("Hotkey must not be empty")
         binding = Binding(key, binding.action, binding.value)
-        callback = self._callback(binding)
+        self._callback(binding)
         # Validate syntax before removing an existing registration.
         keyboard.parse_hotkey_combinations(key)
         previous = self._bindings.get(key)
         self.unbind(key)
         try:
-            remover = bind_key(key, callback)
+            if self._enabled:
+                self._removers[key] = self._register(binding)
         except Exception:
             if previous is not None:
-                self._removers[key] = bind_key(key, self._callback(previous))
+                if self._enabled:
+                    self._removers[key] = self._register(previous)
                 self._bindings[key] = previous
             raise
-        self._removers[key] = remover
         self._bindings[key] = binding
 
     def unbind(self, key):
@@ -74,7 +103,7 @@ class BindingManager:
         if remover is not None:
             remover()
             del self._removers[key]
-            del self._bindings[key]
+        self._bindings.pop(key, None)
 
     def clear(self):
         for key in tuple(self._bindings):
