@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QHBoxLayout, QLabel, QMessageBox,
+    QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -9,12 +9,14 @@ from hotkeys.validation import effective_bindings
 from stratagems import STRATAGEMS
 from ui.binding_table import BindingTable
 from ui.settings_page import SettingsPage
+from ui.hud_overlay import HUDOverlay
 
 
 class BindingPanel(QWidget):
     def __init__(self, manager, bindings, load_error=""):
         super().__init__()
         self.manager = manager
+        self.hud_overlay = HUDOverlay()
         bindings = tuple(bindings)
         self.setWindowTitle("HD2 Undemocratic Tech")
         self.resize(720, 440)
@@ -40,6 +42,9 @@ class BindingPanel(QWidget):
         ):
             button.clicked.connect(callback)
             buttons.addWidget(button)
+        self.hud_overlay_checkbox = QCheckBox("HUD overlay")
+        self.hud_overlay_checkbox.toggled.connect(self.toggle_hud_overlay)
+        buttons.addWidget(self.hud_overlay_checkbox)
         buttons.addStretch()
         layout.addLayout(buttons)
 
@@ -63,6 +68,13 @@ class BindingPanel(QWidget):
         layout.addWidget(self.status)
         if load_error:
             self.status.setText(f"設定讀取失敗，暫用預設值：{load_error}")
+
+    def toggle_hud_overlay(self, enabled):
+        if enabled:
+            self.hud_overlay.update_bindings(self.manager.bindings)
+            self.hud_overlay.show()
+        else:
+            self.hud_overlay.hide()
 
     def select_page(self, index):
         self.pages.setCurrentIndex(index)
@@ -107,6 +119,8 @@ class BindingPanel(QWidget):
             QMessageBox.warning(self, "套用失敗", str(error))
             return
         self.status.setText(f"已套用 {len(desired)} 筆綁定；設定檔未更新。")
+        if self.hud_overlay_checkbox.isChecked():
+            self.hud_overlay.update_bindings(self.manager.bindings)
 
     def save(self):
         try:
@@ -118,5 +132,6 @@ class BindingPanel(QWidget):
         self.status.setText("已儲存所有分頁設定；目前生效的綁定未變更。")
 
     def closeEvent(self, event):
+        self.hud_overlay.close()
         event.accept()
         QApplication.instance().quit()
