@@ -6,6 +6,9 @@ from resources import resource_path
 from stratagems import STRATAGEMS
 
 
+HUD_SCALE = 0.75
+
+
 class HUDOverlay(QWidget):
     def __init__(self):
         super().__init__()
@@ -22,9 +25,16 @@ class HUDOverlay(QWidget):
         self.moved_by_user = False
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setStyleSheet("background: #252525; color: white;")
+        font = self.font()
+        if font.pointSizeF() > 0:
+            font.setPointSizeF(font.pointSizeF() * HUD_SCALE)
+        else:
+            font.setPixelSize(max(1, round(font.pixelSize() * HUD_SCALE)))
+        self.setFont(font)
         self.row = QHBoxLayout(self)
-        self.row.setContentsMargins(8, 8, 8, 8)
-        self.row.setSpacing(6)
+        margin = round(8 * HUD_SCALE)
+        self.row.setContentsMargins(margin, margin, margin, margin)
+        self.row.setSpacing(round(6 * HUD_SCALE))
 
     def update_bindings(self, bindings):
         while self.row.count():
@@ -39,7 +49,7 @@ class HUDOverlay(QWidget):
             item.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             column = QVBoxLayout(item)
             column.setContentsMargins(0, 0, 0, 0)
-            column.setSpacing(4)
+            column.setSpacing(round(4 * HUD_SCALE))
             key_label = QLabel(binding.key.upper(), item)
             key_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             column.addWidget(key_label)
@@ -57,8 +67,9 @@ class HUDOverlay(QWidget):
                 visual = QLabel(stratagem.name, item)
                 visual.setWordWrap(True)
                 visual.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                visual.setStyleSheet("font-size: 9px;")
-            visual.setFixedSize(48, 48)
+                visual.setStyleSheet(f"font-size: {round(9 * HUD_SCALE)}px;")
+            icon_size = round(48 * HUD_SCALE)
+            visual.setFixedSize(icon_size, icon_size)
             column.addWidget(visual, 0, Qt.AlignmentFlag.AlignHCenter)
             self.row.addWidget(item)
         if not self.row.count():
@@ -72,8 +83,11 @@ class HUDOverlay(QWidget):
     def position_hud(self):
         if self.moved_by_user:
             return
-        area = self.screen().availableGeometry()
-        self.move(area.x() + max(0, (area.width() - self.width()) // 2), area.y() + 12)
+        area = self.screen().geometry()
+        self.move(
+            area.x(),
+            area.y() + area.height() - self.height(),
+        )
 
     def showEvent(self, event):
         super().showEvent(event)
