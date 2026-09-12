@@ -1,10 +1,10 @@
-from dataclasses import dataclass
 from functools import partial
 
 import keyboard
 
-from actions import call_stratagem, send_chat
+from game.actions import call_stratagem, send_chat
 from stratagems import STRATAGEMS
+from hotkeys.models import Binding
 
 
 def bind_key(key, callback):
@@ -22,13 +22,6 @@ def bind_stragem(key, stratagem):
 
 def bind_chat(key, text):
     return bind_key(key, partial(send_chat, text))
-
-
-@dataclass(frozen=True)
-class Binding:
-    key: str
-    action: str
-    value: str = ""
 
 
 class BindingManager:

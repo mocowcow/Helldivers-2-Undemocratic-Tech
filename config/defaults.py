@@ -1,4 +1,4 @@
-from bindings import Binding
+from hotkeys.models import Binding
 
 
 INPUT_PAUSE = 0.017

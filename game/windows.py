@@ -2,8 +2,6 @@ import ctypes
 from ctypes import wintypes
 from pathlib import PureWindowsPath
 
-from PySide6.QtCore import QObject, Qt, Signal, Slot
-
 
 GAME_EXECUTABLE = "helldivers2.exe"
 EVENT_SYSTEM_FOREGROUND = 0x0003
@@ -32,6 +30,13 @@ kernel32.QueryFullProcessImageNameW.argtypes = [
 kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 kernel32.CloseHandle.restype = wintypes.BOOL
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.SetForegroundWindow.restype = wintypes.BOOL
+user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+user32.AttachThreadInput.restype = wintypes.BOOL
+user32.SetFocus.argtypes = [wintypes.HWND]
+user32.SetFocus.restype = wintypes.HWND
+kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 
 def is_game_foreground():
@@ -56,46 +61,31 @@ def is_game_foreground():
         kernel32.CloseHandle(process)
 
 
-class ForegroundMonitor(QObject):
-    changed = Signal()
+def get_foreground_window():
+    return user32.GetForegroundWindow()
 
-    def __init__(self, manager):
-        super().__init__()
-        self.manager = manager
-        self.hook = None
-        self.callback = WinEventProc(self.on_event)
-        self.changed.connect(self.refresh, Qt.ConnectionType.QueuedConnection)
 
-    def start(self):
-        if self.hook:
-            return
-        # Receive all foreground transitions, including this application's windows.
-        self.hook = user32.SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
-            None, self.callback, 0, 0, 0,
-        )
-        if not self.hook:
-            raise ctypes.WinError(ctypes.get_last_error())
-        self.refresh()
+def set_foreground_window(hwnd):
+    return user32.SetForegroundWindow(hwnd)
 
-    def on_event(self, hook, event, hwnd, object_id, child_id, thread_id, timestamp):
-        self.changed.emit()
 
-    @Slot()
-    def refresh(self):
-        if not self.hook:
-            return
-        if is_game_foreground():
-            try:
-                self.manager.enable()
-            except Exception as error:
-                self.manager.disable()
-                print(f"啟用快捷鍵失敗：{error}", flush=True)
-        else:
-            self.manager.disable()
+def activate_foreground(hwnd):
+    user32.SetForegroundWindow(hwnd)
+    if user32.GetForegroundWindow() == hwnd:
+        user32.SetFocus(hwnd)
+        return
 
-    def stop(self):
-        if self.hook:
-            user32.UnhookWinEvent(self.hook)
-            self.hook = None
-        self.manager.disable()
+    foreground = user32.GetForegroundWindow()
+    foreground_thread = user32.GetWindowThreadProcessId(foreground, None)
+    current_thread = kernel32.GetCurrentThreadId()
+    if not foreground_thread or foreground_thread == current_thread:
+        return
+    attached = user32.AttachThreadInput(current_thread, foreground_thread, True)
+    if not attached:
+        return
+    try:
+        user32.SetForegroundWindow(hwnd)
+        if user32.GetForegroundWindow() == hwnd:
+            user32.SetFocus(hwnd)
+    finally:
+        user32.AttachThreadInput(current_thread, foreground_thread, False)

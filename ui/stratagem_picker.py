@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import (
@@ -8,9 +6,10 @@ from PySide6.QtWidgets import (
 )
 
 from stratagems import STRATAGEMS
+from resources import resource_path
 
 
-SVG_DIRECTORY = Path(__file__).resolve().parent / "stratagems-svg"
+SVG_DIRECTORY = resource_path("stratagems-svg")
 TILE_SIZE = 84
 COLUMNS = 10
 

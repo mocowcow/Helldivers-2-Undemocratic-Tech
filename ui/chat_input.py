@@ -1,46 +1,10 @@
-import ctypes
-from ctypes import wintypes
 from threading import Event
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import QLineEdit
 
-
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-user32.GetForegroundWindow.restype = wintypes.HWND
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-user32.AttachThreadInput.restype = wintypes.BOOL
-user32.SetFocus.argtypes = [wintypes.HWND]
-user32.SetFocus.restype = wintypes.HWND
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-kernel32.GetCurrentThreadId.restype = wintypes.DWORD
-
-
-def activate_foreground(hwnd):
-    user32.SetForegroundWindow(hwnd)
-    if user32.GetForegroundWindow() == hwnd:
-        user32.SetFocus(hwnd)
-        return
-
-    foreground = user32.GetForegroundWindow()
-    foreground_thread = user32.GetWindowThreadProcessId(foreground, None)
-    current_thread = kernel32.GetCurrentThreadId()
-    if not foreground_thread or foreground_thread == current_thread:
-        return
-    attached = user32.AttachThreadInput(current_thread, foreground_thread, True)
-    if not attached:
-        return
-    try:
-        user32.SetForegroundWindow(hwnd)
-        if user32.GetForegroundWindow() == hwnd:
-            user32.SetFocus(hwnd)
-    finally:
-        user32.AttachThreadInput(current_thread, foreground_thread, False)
+from game.windows import activate_foreground, get_foreground_window, set_foreground_window
 
 
 class ChatInput(QLineEdit):
@@ -65,7 +29,7 @@ class ChatInput(QLineEdit):
         # Global keyboard callbacks must not manipulate Qt widgets directly.
         if not self.active.is_set():
             self.active.set()
-            self.open_requested.emit(user32.GetForegroundWindow())
+            self.open_requested.emit(get_foreground_window())
 
     @Slot(object)
     def open_input(self, target):
@@ -87,7 +51,7 @@ class ChatInput(QLineEdit):
         self.raise_()
         self.activateWindow()
         activate_foreground(int(self.winId()))
-        if user32.GetForegroundWindow() == int(self.winId()):
+        if get_foreground_window() == int(self.winId()):
             self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def inputMethodEvent(self, event):
@@ -107,7 +71,7 @@ class ChatInput(QLineEdit):
     def cancel(self):
         self.hide()
         if self.target:
-            user32.SetForegroundWindow(self.target)
+            set_foreground_window(self.target)
         self.active.clear()
 
     def submit(self):
@@ -117,11 +81,11 @@ class ChatInput(QLineEdit):
             return
         self.hide()
         if self.target:
-            user32.SetForegroundWindow(self.target)
+            set_foreground_window(self.target)
         QTimer.singleShot(150, lambda: self.deliver(text))
 
     def deliver(self, text):
-        if not self.target or user32.GetForegroundWindow() != self.target:
+        if not self.target or get_foreground_window() != self.target:
             print("無法切回原視窗，文字尚未送出。", flush=True)
             self.show_and_focus()
             return

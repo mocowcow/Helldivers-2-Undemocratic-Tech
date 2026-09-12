@@ -1,21 +1,22 @@
-from pathlib import Path
-
 import pydirectinput as pdi
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from actions import send_chat
-from binding_panel import BindingPanel
-from bindings import BindingManager
-from chat_input import ChatInput
-from defaults import DEFAULT_BINDINGS, INPUT_PAUSE
-from foreground import ForegroundMonitor, is_game_foreground
-from settings import effective_bindings, load_bindings
+from config.defaults import DEFAULT_BINDINGS, INPUT_PAUSE
+from config.settings import load_bindings
+from game.actions import send_chat
+from game.windows import is_game_foreground
+from hotkeys.foreground import ForegroundMonitor
+from hotkeys.manager import BindingManager
+from hotkeys.validation import effective_bindings
+from resources import resource_path
+from ui.binding_panel import BindingPanel
+from ui.chat_input import ChatInput
 
 
 def main():
     app = QApplication([])
-    app.setWindowIcon(QIcon(str(Path(__file__).resolve().with_name("icon.ico"))))
+    app.setWindowIcon(QIcon(str(resource_path("icon.ico"))))
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
     bindings = BindingManager(chat_input.request, is_game_foreground)
