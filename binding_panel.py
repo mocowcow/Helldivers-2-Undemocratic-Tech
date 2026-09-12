@@ -1,7 +1,7 @@
 from PySide6.QtCore import QEvent, QItemSelectionModel, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QButtonGroup, QComboBox, QFormLayout,
+    QAbstractItemView, QApplication, QButtonGroup, QFormLayout,
     QHeaderView, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
@@ -10,6 +10,7 @@ from bindings import Binding
 from key_input import KeyInput
 from settings import SETTINGS_PATH, effective_bindings, save_bindings
 from stratagems import STRATAGEMS
+from stratagem_picker import StratagemButton
 
 
 class BindingTable(QTableWidget):
@@ -36,11 +37,8 @@ class BindingTable(QTableWidget):
         row = self.rowCount()
         self.insertRow(row)
         if self.action == "stratagem":
-            field = QComboBox()
-            for name in STRATAGEMS:
-                field.addItem(name, name)
-            field.setCurrentIndex(field.findData(binding.value))
-            field.currentIndexChanged.connect(lambda _: self.changed.emit())
+            field = StratagemButton(binding.value)
+            field.changed.connect(self.changed.emit)
         else:
             field = QLineEdit(binding.value)
             field.textChanged.connect(lambda _: self.changed.emit())
@@ -68,7 +66,7 @@ class BindingTable(QTableWidget):
         return tuple(
             Binding(
                 self.cellWidget(row, 1).key, self.action,
-                self.cellWidget(row, 0).currentData()
+                self.cellWidget(row, 0).name
                 if self.action == "stratagem" else self.cellWidget(row, 0).text(),
             )
             for row in range(self.rowCount())
