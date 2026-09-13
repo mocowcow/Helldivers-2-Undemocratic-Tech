@@ -10,7 +10,6 @@ from ui.key_input import KeyInput
 
 
 class SettingsPage(QWidget):
-    changed = Signal()
     save_requested = Signal()
 
     def __init__(self, bindings):
@@ -29,13 +28,16 @@ class SettingsPage(QWidget):
         form.addRow("設定檔儲存位置", path_row)
         current_key = next((b.key for b in bindings if b.action == "open_chat"), "")
         self.open_chat_key = KeyInput(current_key)
-        self.open_chat_key.changed.connect(self.changed.emit)
         chat_key_row = QHBoxLayout()
         chat_key_row.addWidget(self.open_chat_key)
-        clear_key = QPushButton("清除")
-        clear_key.clicked.connect(self.open_chat_key.clear_binding)
-        chat_key_row.addWidget(clear_key)
+        self.clear_key = QPushButton("清除")
+        self.clear_key.clicked.connect(self.open_chat_key.clear_binding)
+        chat_key_row.addWidget(self.clear_key)
         form.addRow("開啟聊天視窗快捷鍵", chat_key_row)
+
+    def set_bindings_editable(self, editable):
+        self.open_chat_key.setEnabled(editable)
+        self.clear_key.setEnabled(editable)
 
     def draft(self):
         key = self.open_chat_key.key

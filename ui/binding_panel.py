@@ -34,14 +34,15 @@ class BindingPanel(QWidget):
         buttons = QHBoxLayout()
         self.add_button = QPushButton("增加")
         self.delete_button = QPushButton("刪除")
-        apply_button = QPushButton("套用")
         for button, callback in (
             (self.add_button, self.add_row),
             (self.delete_button, self.delete_rows),
-            (apply_button, self.apply),
         ):
             button.clicked.connect(callback)
             buttons.addWidget(button)
+        self.enable_checkbox = QCheckBox("啟用")
+        self.enable_checkbox.toggled.connect(self.toggle_bindings)
+        buttons.addWidget(self.enable_checkbox)
         self.hud_overlay_checkbox = QCheckBox("HUD overlay")
         self.hud_overlay_checkbox.toggled.connect(self.toggle_hud_overlay)
         buttons.addWidget(self.hud_overlay_checkbox)
@@ -53,16 +54,15 @@ class BindingPanel(QWidget):
         self.chat_table = BindingTable("chat", bindings)
         for table in (self.stratagem_table, self.chat_table):
             self.pages.addWidget(table)
-            table.changed.connect(self.mark_dirty)
+        self.stratagem_table.changed.connect(self.refresh_hud_overlay)
 
         self.settings_page = SettingsPage(bindings)
-        self.settings_page.changed.connect(self.mark_dirty)
         self.settings_page.save_requested.connect(self.save)
         self.pages.addWidget(self.settings_page)
         layout.addWidget(self.pages)
         self.navigation.idClicked.connect(self.select_page)
 
-        layout.addWidget(QLabel("「套用」更新所有分頁的綁定；Settings 的「儲存」寫入設定檔。"))
+        layout.addWidget(QLabel("勾選「啟用」綁定快捷鍵，取消勾選解除綁定；Settings 的「儲存」寫入設定檔。"))
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -71,18 +71,26 @@ class BindingPanel(QWidget):
 
     def toggle_hud_overlay(self, enabled):
         if enabled:
-            self.hud_overlay.update_bindings(self.manager.bindings)
+            self.hud_overlay.update_bindings(self.stratagem_table.draft())
             self.hud_overlay.show()
         else:
             self.hud_overlay.hide()
 
     def select_page(self, index):
         self.pages.setCurrentIndex(index)
-        self.add_button.setEnabled(index < 2)
-        self.delete_button.setEnabled(index < 2)
+        editable = not self.enable_checkbox.isChecked() and index < 2
+        self.add_button.setEnabled(editable)
+        self.delete_button.setEnabled(editable)
 
-    def mark_dirty(self, *args):
-        self.status.setText("內容已修改；請按「套用」更新綁定，按「儲存」保存設定。")
+    def refresh_hud_overlay(self):
+        if self.hud_overlay_checkbox.isChecked():
+            self.hud_overlay.update_bindings(self.stratagem_table.draft())
+
+    def set_bindings_editable(self, editable):
+        self.stratagem_table.setEnabled(editable)
+        self.chat_table.setEnabled(editable)
+        self.settings_page.set_bindings_editable(editable)
+        self.select_page(self.pages.currentIndex())
 
     def draft(self):
         bindings = self.stratagem_table.draft() + self.chat_table.draft()
@@ -96,7 +104,7 @@ class BindingPanel(QWidget):
         table.append_binding(Binding("", table.action, value))
         table.selectRow(table.rowCount() - 1)
         table.scrollToBottom()
-        self.mark_dirty()
+        self.refresh_hud_overlay()
 
     def delete_rows(self):
         table = self.pages.currentWidget()
@@ -108,19 +116,26 @@ class BindingPanel(QWidget):
             return
         for index in sorted(rows, key=lambda item: item.row(), reverse=True):
             table.removeRow(index.row())
-        self.mark_dirty()
+        self.refresh_hud_overlay()
 
-    def apply(self):
+    def toggle_bindings(self, enabled):
+        if not enabled:
+            self.manager.disable()
+            self.set_bindings_editable(True)
+            self.status.setText("已解除快捷鍵綁定。")
+            return
         try:
             desired = effective_bindings(self.draft())
             self.manager.replace(desired)
+            self.manager.enable()
         except Exception as error:
-            self.status.setText(f"套用失敗：{error}")
-            QMessageBox.warning(self, "套用失敗", str(error))
+            self.manager.disable()
+            self.enable_checkbox.setChecked(False)
+            self.status.setText(f"啟用失敗：{error}")
+            QMessageBox.warning(self, "啟用失敗", str(error))
             return
-        self.status.setText(f"已套用 {len(desired)} 筆綁定；設定檔未更新。")
-        if self.hud_overlay_checkbox.isChecked():
-            self.hud_overlay.update_bindings(self.manager.bindings)
+        self.set_bindings_editable(False)
+        self.status.setText(f"已啟用 {len(desired)} 筆綁定；取消勾選後可修改。設定檔未更新。")
 
     def save(self):
         try:

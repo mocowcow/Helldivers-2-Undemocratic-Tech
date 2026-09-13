@@ -5,8 +5,6 @@ from PySide6.QtWidgets import QApplication
 from config.defaults import DEFAULT_BINDINGS, INPUT_PAUSE
 from config.settings import load_bindings
 from game.actions import send_chat
-from game.windows import is_game_foreground
-from hotkeys.foreground import ForegroundMonitor
 from hotkeys.manager import BindingManager
 from hotkeys.validation import effective_bindings
 from resources import resource_path
@@ -19,8 +17,7 @@ def main():
     app.setWindowIcon(QIcon(str(resource_path("icon.ico"))))
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
-    bindings = BindingManager(chat_input.request, is_game_foreground)
-    foreground = ForegroundMonitor(bindings)
+    bindings = BindingManager(chat_input.request)
     load_error = ""
     try:
         saved_bindings = load_bindings()
@@ -33,11 +30,10 @@ def main():
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error)
         panel.show()
-        foreground.start()
         return app.exec()
     finally:
         try:
-            foreground.stop()
+            bindings.disable()
         finally:
             bindings.clear()
 
