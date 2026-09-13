@@ -1,7 +1,10 @@
+import time
+
 import keyboard
 import pydirectinput as pdi
 
 
+CHAT_CHUNK_LIMIT = 10
 DIRECTION_KEYS = {
     "up": "w",
     "down": "s",
@@ -12,7 +15,9 @@ DIRECTION_KEYS = {
 
 def send_chat(text):
     pdi.press("enter")
-    keyboard.write(text)
+    for start in range(0, len(text), CHAT_CHUNK_LIMIT):
+        keyboard.write(text[start:start + CHAT_CHUNK_LIMIT])
+        time.sleep(0.05)
     pdi.press("enter")
 
 
