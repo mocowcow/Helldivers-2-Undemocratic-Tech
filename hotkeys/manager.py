@@ -5,15 +5,61 @@ import keyboard
 from game.actions import call_stratagem, send_chat
 from stratagems import STRATAGEMS
 from hotkeys.models import Binding
+from hotkeys.keys import resolve_key
+
+
+_scan_hooks = {}
+
+
+def _subscribe_scan_code(code, handler):
+    entry = _scan_hooks.get(code)
+    if entry is None:
+        handlers = []
+
+        def dispatch(event):
+            return all(callback(event) for callback in tuple(handlers))
+
+        remove_hook = keyboard.hook_key(code, dispatch, suppress=True)
+        entry = (handlers, remove_hook)
+        _scan_hooks[code] = entry
+    handlers, remove_hook = entry
+    handlers.append(handler)
+
+    def unsubscribe():
+        if handler not in handlers:
+            return
+        handlers.remove(handler)
+        if not handlers:
+            remove_hook()
+            del _scan_hooks[code]
+
+    return unsubscribe
 
 
 def bind_key(key, callback):
+    identities = set(resolve_key(key))
+
     def handler(event):
+        if (event.scan_code, event.is_keypad) not in identities:
+            return True
         if event.event_type == keyboard.KEY_UP:
             callback()
         return False
 
-    return keyboard.hook_key(key, handler, suppress=True)
+    removers = []
+    try:
+        for code in sorted({code for code, _ in identities}):
+            removers.append(_subscribe_scan_code(code, handler))
+    except Exception:
+        for remove in removers:
+            remove()
+        raise
+
+    def unbind():
+        for remove in removers:
+            remove()
+
+    return unbind
 
 
 def bind_stragem(key, stratagem):
@@ -79,7 +125,7 @@ class BindingManager:
         binding = Binding(key, binding.action, binding.value)
         self._callback(binding)
         # Validate the single key before removing an existing registration.
-        keyboard.key_to_scan_codes(key)
+        resolve_key(key)
         previous = self._bindings.get(key)
         self.unbind(key)
         try:
@@ -111,11 +157,11 @@ class BindingManager:
         keys = set()
         for binding in bindings:
             key = binding.key.strip().lower()
-            if not key or key in keys:
+            identities = set(resolve_key(key)) if key else set()
+            if not identities or keys.intersection(identities):
                 raise ValueError(f"Empty or duplicate hotkey: {key}")
             self._callback(binding)
-            keyboard.key_to_scan_codes(key)
-            keys.add(key)
+            keys.update(identities)
             normalized.append(Binding(key, binding.action, binding.value))
 
         previous = self.bindings

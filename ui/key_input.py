@@ -1,7 +1,8 @@
-import keyboard
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QLineEdit
+
+from hotkeys.keys import NUMPAD_NAMES, resolve_key
 
 
 KEY_NAMES = {
@@ -100,8 +101,13 @@ class KeyInput(QLineEdit):
         name = KEY_NAMES.get(event.key())
         if name is None:
             name = QKeySequence(event.key()).toString(QKeySequence.SequenceFormat.PortableText).lower()
+        if (event.modifiers() & Qt.KeyboardModifier.KeypadModifier
+                and event.key() != Qt.Key.Key_NumLock):
+            # Use the physical scan code rather than the Num Lock-dependent name.
+            keypad_name = NUMPAD_NAMES.get(event.nativeScanCode() & 0xff)
+            name = f"num {keypad_name}" if keypad_name is not None else ""
         try:
-            if not name or not keyboard.key_to_scan_codes(name):
+            if not name or not resolve_key(name):
                 raise ValueError("Unsupported key")
         except (ValueError, KeyError):
             self.candidate = ""

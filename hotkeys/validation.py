@@ -1,4 +1,4 @@
-import keyboard
+from hotkeys.keys import resolve_key
 
 from stratagems import STRATAGEMS
 
@@ -20,7 +20,7 @@ def validate_bindings(bindings):
         if binding.action == "chat" and not binding.value.strip():
             raise ValueError("聊天文字不可空白。")
         try:
-            scan_codes = set(keyboard.key_to_scan_codes(binding.key))
+            scan_codes = set(resolve_key(binding.key))
         except (ValueError, KeyError) as error:
             raise ValueError(f"不支援的單一按鍵：{binding.key}") from error
         if not scan_codes:
