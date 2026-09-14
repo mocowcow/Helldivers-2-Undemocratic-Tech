@@ -78,9 +78,8 @@ def bind_chat(key, text):
 
 
 class BindingManager:
-    def __init__(self, open_chat, can_trigger=None):
+    def __init__(self, open_chat):
         self.open_chat = open_chat
-        self.can_trigger = can_trigger
         self._enabled = False
         self._bindings = {}
         self._removers = {}
@@ -93,7 +92,7 @@ class BindingManager:
         callback = self._callback(binding)
 
         def invoke():
-            if self._enabled and (self.can_trigger is None or self.can_trigger()):
+            if self._enabled:
                 callback()
 
         return bind_key(binding.key, invoke)
