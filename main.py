@@ -37,6 +37,7 @@ def main():
         bindings.replace(effective_bindings(saved_bindings))
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error)
+        bindings.on_stratagem_trigger = panel.hud_overlay.cooldown_requested.emit
         panel.show()
         return app.exec()
     finally:

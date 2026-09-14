@@ -51,6 +51,10 @@ class BindingPanel(QWidget):
         self.hud_overlay_checkbox = QCheckBox("HUD overlay")
         self.hud_overlay_checkbox.toggled.connect(self.toggle_hud_overlay)
         buttons.addWidget(self.hud_overlay_checkbox)
+        self.cooldown_checkbox = QCheckBox("預估cd")
+        self.cooldown_checkbox.setToolTip("依熱鍵觸發時間預估冷卻，不確認遊戲是否成功呼叫。")
+        self.cooldown_checkbox.toggled.connect(self.update_cooldown_enabled)
+        buttons.addWidget(self.cooldown_checkbox)
         buttons.addStretch()
         layout.addLayout(buttons)
 
@@ -76,11 +80,18 @@ class BindingPanel(QWidget):
 
     def toggle_hud_overlay(self, enabled):
         logger.info("HUD 顯示狀態 enabled=%s", enabled)
+        self.update_cooldown_enabled()
         if enabled:
             self.hud_overlay.update_bindings(self.stratagem_table.draft())
             self.hud_overlay.show()
         else:
             self.hud_overlay.hide()
+
+    def update_cooldown_enabled(self, *args):
+        self.hud_overlay.set_cooldown_enabled(
+            self.hud_overlay_checkbox.isChecked() and self.cooldown_checkbox.isChecked(),
+            clear=not self.cooldown_checkbox.isChecked(),
+        )
 
     def select_page(self, index):
         self.pages.setCurrentIndex(index)

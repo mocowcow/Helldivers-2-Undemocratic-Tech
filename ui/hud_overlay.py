@@ -1,4 +1,7 @@
-from PySide6.QtCore import Qt
+import math
+import time
+
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -10,8 +13,18 @@ HUD_SCALE = 0.75
 
 
 class HUDOverlay(QWidget):
+    cooldown_requested = Signal(str, float)
+
     def __init__(self):
         super().__init__()
+        self.cooldown_enabled = False
+        self.enabled_since = 0.0
+        self.deadlines = {}
+        self.countdown_labels = {}
+        self.countdown_timer = QTimer(self)
+        self.countdown_timer.setInterval(100)
+        self.countdown_timer.timeout.connect(self.refresh_countdowns)
+        self.cooldown_requested.connect(self.start_cooldown, Qt.ConnectionType.QueuedConnection)
         self.setWindowTitle("Stratagem HUD")
         self.setWindowFlags(
             Qt.WindowType.Tool
@@ -37,6 +50,7 @@ class HUDOverlay(QWidget):
         self.row.setSpacing(round(6 * HUD_SCALE))
 
     def update_bindings(self, bindings):
+        self.countdown_labels.clear()
         while self.row.count():
             widget = self.row.takeAt(0).widget()
             widget.hide()
@@ -70,6 +84,16 @@ class HUDOverlay(QWidget):
                 visual.setStyleSheet(f"font-size: {round(9 * HUD_SCALE)}px;")
             icon_size = round(48 * HUD_SCALE)
             visual.setFixedSize(icon_size, icon_size)
+            countdown = QLabel(visual)
+            countdown.setGeometry(0, (icon_size - 20) // 2, icon_size, 20)
+            countdown.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            countdown.setStyleSheet(
+                "background-color: rgba(0, 0, 0, 150); color: white; "
+                "font-size: 12px; font-weight: bold;"
+            )
+            countdown.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            countdown.hide()
+            self.countdown_labels.setdefault(binding.value, []).append(countdown)
             column.addWidget(visual, 0, Qt.AlignmentFlag.AlignHCenter)
             self.row.addWidget(item)
         if not self.row.count():
@@ -79,6 +103,56 @@ class HUDOverlay(QWidget):
         self.row.activate()
         self.adjustSize()
         self.position_hud()
+        self.refresh_countdowns()
+
+    def set_cooldown_enabled(self, enabled, clear=True):
+        if not enabled and clear:
+            self.clear_countdowns()
+        if enabled == self.cooldown_enabled:
+            return
+        self.cooldown_enabled = enabled
+        if enabled:
+            self.enabled_since = time.monotonic()
+
+    def clear_countdowns(self):
+        self.countdown_timer.stop()
+        self.deadlines.clear()
+        for labels in self.countdown_labels.values():
+            for label in labels:
+                label.clear()
+                label.hide()
+
+    @Slot(str, float)
+    def start_cooldown(self, name, triggered_at):
+        # Discard queued triggers from before the latest enabling of both options.
+        if not self.cooldown_enabled or triggered_at < self.enabled_since:
+            return
+        stratagem = STRATAGEMS.get(name)
+        if stratagem is None or stratagem.cooldown <= 0:
+            return
+        self.deadlines[name] = triggered_at + stratagem.cooldown
+        self.refresh_countdowns()
+        if self.deadlines:
+            self.countdown_timer.start()
+
+    def refresh_countdowns(self):
+        now = time.monotonic()
+        for name, deadline in tuple(self.deadlines.items()):
+            if deadline <= now:
+                del self.deadlines[name]
+        for name, labels in self.countdown_labels.items():
+            remaining = max(0, math.ceil(self.deadlines.get(name, now) - now))
+            for label in labels:
+                if remaining:
+                    minutes, seconds = divmod(remaining, 60)
+                    label.setText(f"{minutes}:{seconds:02d}")
+                    label.show()
+                    label.raise_()
+                else:
+                    label.clear()
+                    label.hide()
+        if not self.deadlines:
+            self.countdown_timer.stop()
 
     def position_hud(self):
         if self.moved_by_user:

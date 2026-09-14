@@ -1,5 +1,6 @@
 from functools import partial
 import logging
+import time
 
 import keyboard
 
@@ -78,8 +79,9 @@ def bind_chat(key, text):
 
 
 class BindingManager:
-    def __init__(self, open_chat):
+    def __init__(self, open_chat, on_stratagem_trigger=None):
         self.open_chat = open_chat
+        self.on_stratagem_trigger = on_stratagem_trigger
         self._enabled = False
         self._bindings = {}
         self._removers = {}
@@ -93,6 +95,8 @@ class BindingManager:
 
         def invoke():
             if self._enabled:
+                if binding.action == "stratagem" and self.on_stratagem_trigger:
+                    self.on_stratagem_trigger(binding.value, time.monotonic())
                 callback()
 
         return bind_key(binding.key, invoke)
