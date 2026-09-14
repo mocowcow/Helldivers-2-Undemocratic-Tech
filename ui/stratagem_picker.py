@@ -1,4 +1,5 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSize, QRect
+from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import (
     QDialog, QGridLayout, QGroupBox, QLabel, QPushButton, QScrollArea,
@@ -98,8 +99,34 @@ class StratagemButton(QPushButton):
     def __init__(self, name):
         super().__init__(name)
         self.name = name
+        self.setIconSize(QSize(28, 28))
+        self.update_visual()
         self.setToolTip("點擊選擇 Stratagem")
         self.clicked.connect(self.choose)
+
+    def update_visual(self):
+        self.setText(self.name)
+        icon = QIcon()
+        stratagem = STRATAGEMS.get(self.name)
+        if stratagem is not None and stratagem.svg_name:
+            path = SVG_DIRECTORY / stratagem.svg_name
+            if path.is_file():
+                source = QIcon(str(path))
+                size = self.iconSize()
+                ratio = self.devicePixelRatioF()
+                background = QPixmap(
+                    round(size.width() * ratio), round(size.height() * ratio),
+                )
+                background.setDevicePixelRatio(ratio)
+                background.fill(Qt.GlobalColor.black)
+                painter = QPainter(background)
+                try:
+                    source.paint(painter, QRect(0, 0, size.width(), size.height()))
+                finally:
+                    painter.end()
+                icon = QIcon(background)
+                icon.addPixmap(background, QIcon.Mode.Disabled)
+        self.setIcon(icon)
 
     def choose(self):
         picker = StratagemPicker(self.name, self.window())
@@ -107,7 +134,7 @@ class StratagemButton(QPushButton):
             if picker.exec() == QDialog.DialogCode.Accepted:
                 if picker.selected_name != self.name:
                     self.name = picker.selected_name
-                    self.setText(self.name)
+                    self.update_visual()
                     self.changed.emit()
         finally:
             picker.deleteLater()

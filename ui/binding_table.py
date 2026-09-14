@@ -14,6 +14,8 @@ class BindingTable(QTableWidget):
     def __init__(self, action, bindings):
         super().__init__(0, 2)
         self.action = action
+        if action == "stratagem":
+            self.verticalHeader().setDefaultSectionSize(40)
         self.setHorizontalHeaderLabels([
             "Stratagem" if action == "stratagem" else "Chat message", "快捷鍵",
         ])
