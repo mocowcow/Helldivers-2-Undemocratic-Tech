@@ -1,3 +1,6 @@
+import logging
+import sys
+
 import pydirectinput as pdi
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
@@ -10,6 +13,10 @@ from hotkeys.validation import effective_bindings
 from resources import resource_path
 from ui.binding_panel import BindingPanel
 from ui.chat_input import ChatInput
+from diagnostics import configure_logging, LOG_PATH
+
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -22,6 +29,7 @@ def main():
     try:
         saved_bindings = load_bindings()
     except (OSError, ValueError) as error:
+        logger.exception("設定載入失敗，使用預設綁定")
         saved_bindings = DEFAULT_BINDINGS
         load_error = str(error)
 
@@ -39,4 +47,16 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    configure_logging()
+    logger.info(
+        "啟動 frozen=%s executable=%s python=%s log=%s",
+        getattr(sys, "frozen", False), sys.executable, sys.version, LOG_PATH,
+    )
+    try:
+        exit_code = main()
+    except Exception:
+        logger.exception("程式異常結束")
+        raise SystemExit(1)
+    else:
+        logger.info("程式結束 exit_code=%s", exit_code)
+        raise SystemExit(exit_code)

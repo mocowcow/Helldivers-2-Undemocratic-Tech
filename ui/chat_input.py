@@ -1,10 +1,14 @@
 from threading import Event
+import logging
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import QLineEdit
 
 from game.windows import activate_foreground, get_foreground_window, set_foreground_window
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChatInput(QLineEdit):
@@ -33,6 +37,7 @@ class ChatInput(QLineEdit):
 
     @Slot(object)
     def open_input(self, target):
+        logger.info("開啟聊天視窗 target=%s", target)
         self.target = target
         self.composing = False
         self.clear()
@@ -69,6 +74,7 @@ class ChatInput(QLineEdit):
             super().keyPressEvent(event)
 
     def cancel(self):
+        logger.info("取消聊天輸入")
         self.hide()
         if self.target:
             set_foreground_window(self.target)
@@ -86,13 +92,13 @@ class ChatInput(QLineEdit):
 
     def deliver(self, text):
         if not self.target or get_foreground_window() != self.target:
-            print("無法切回原視窗，文字尚未送出。", flush=True)
+            logger.warning("無法切回原視窗，文字尚未送出 target=%s", self.target)
             self.show_and_focus()
             return
         try:
             self.send_chat(text)
-        except Exception as error:
-            print(f"輸入中斷，請確認遊戲聊天狀態：{error}", flush=True)
+        except Exception:
+            logger.exception("聊天輸入中斷，請確認遊戲聊天狀態")
             self.show_and_focus()
         else:
             self.active.clear()

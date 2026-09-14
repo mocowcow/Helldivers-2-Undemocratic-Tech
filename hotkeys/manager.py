@@ -1,4 +1,5 @@
 from functools import partial
+import logging
 
 import keyboard
 
@@ -9,6 +10,7 @@ from hotkeys.keys import resolve_key
 
 
 _scan_hooks = {}
+logger = logging.getLogger(__name__)
 
 
 def _subscribe_scan_code(code, handler):
@@ -43,7 +45,12 @@ def bind_key(key, callback):
         if (event.scan_code, event.is_keypad) not in identities:
             return True
         if event.event_type == keyboard.KEY_UP:
-            callback()
+            try:
+                logger.info("快捷鍵開始 key=%s", key)
+                callback()
+                logger.info("快捷鍵回呼完成 key=%s", key)
+            except Exception:
+                logger.exception("快捷鍵執行失敗 key=%s", key)
         return False
 
     removers = []
@@ -101,12 +108,16 @@ class BindingManager:
             self.disable()
             raise
         self._enabled = True
+        logger.info("已啟用綁定 count=%s", len(self._removers))
 
     def disable(self):
+        count = len(self._removers)
         self._enabled = False
         for key in tuple(self._removers):
             self._removers[key]()
             del self._removers[key]
+        if count:
+            logger.info("已解除綁定 count=%s", count)
 
     def _callback(self, binding):
         if binding.action == "stratagem":

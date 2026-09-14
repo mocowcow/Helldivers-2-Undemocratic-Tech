@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -9,10 +10,12 @@ from hotkeys.validation import validate_bindings
 
 
 SETTINGS_PATH = Path(os.environ["LOCALAPPDATA"]) / "HD2" / "bindings.json"
+logger = logging.getLogger(__name__)
 
 
 def load_bindings(path=SETTINGS_PATH):
     if not path.exists():
+        logger.info("設定檔不存在，使用預設綁定 path=%s", path)
         return DEFAULT_BINDINGS
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("version") != 2:
@@ -31,6 +34,7 @@ def load_bindings(path=SETTINGS_PATH):
             raise ValueError("綁定欄位格式錯誤。")
         bindings.append(Binding(item["key"], item["action"], item["value"]))
     validate_bindings(bindings)
+    logger.info("設定載入完成 path=%s count=%s", path, len(bindings))
     return tuple(bindings)
 
 
@@ -55,6 +59,7 @@ def save_bindings(bindings, path=SETTINGS_PATH):
             json.dump(data, output, ensure_ascii=False, indent=2)
             output.write("\n")
         temporary.replace(path)
+        logger.info("設定儲存完成 path=%s count=%s", path, len(bindings))
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)

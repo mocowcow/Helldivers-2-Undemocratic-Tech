@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
@@ -50,4 +52,5 @@ class SettingsPage(QWidget):
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
                 raise OSError("無法開啟設定檔資料夾。")
         except OSError as error:
+            logging.getLogger(__name__).exception("開啟設定檔資料夾失敗")
             QMessageBox.warning(self, "開啟儲存路徑失敗", str(error))

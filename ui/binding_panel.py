@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
@@ -10,6 +12,9 @@ from stratagems import STRATAGEMS
 from ui.binding_table import BindingTable
 from ui.settings_page import SettingsPage
 from ui.hud_overlay import HUDOverlay
+
+
+logger = logging.getLogger(__name__)
 
 
 class BindingPanel(QWidget):
@@ -70,6 +75,7 @@ class BindingPanel(QWidget):
             self.status.setText(f"設定讀取失敗，暫用預設值：{load_error}")
 
     def toggle_hud_overlay(self, enabled):
+        logger.info("HUD 顯示狀態 enabled=%s", enabled)
         if enabled:
             self.hud_overlay.update_bindings(self.stratagem_table.draft())
             self.hud_overlay.show()
@@ -129,6 +135,7 @@ class BindingPanel(QWidget):
             self.manager.replace(desired)
             self.manager.enable()
         except Exception as error:
+            logger.exception("啟用綁定失敗")
             self.manager.disable()
             self.enable_checkbox.setChecked(False)
             self.status.setText(f"啟用失敗：{error}")
@@ -141,6 +148,7 @@ class BindingPanel(QWidget):
         try:
             save_bindings(self.draft())
         except Exception as error:
+            logger.exception("儲存設定失敗")
             self.status.setText(f"儲存失敗：{error}")
             QMessageBox.warning(self, "儲存失敗", str(error))
             return
