@@ -1,9 +1,10 @@
 import math
 import time
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot, QSize
+from PySide6.QtGui import QIcon
 from PySide6.QtSvgWidgets import QSvgWidget
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget, QToolButton
 
 from resources import resource_path
 from stratagems import STRATAGEMS
@@ -35,6 +36,7 @@ class HUDOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.drag_offset = None
+        self.locked = False
         self.moved_by_user = False
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setStyleSheet("background: #252525; color: white;")
@@ -48,11 +50,29 @@ class HUDOverlay(QWidget):
         margin = round(8 * HUD_SCALE)
         self.row.setContentsMargins(margin, margin, margin, margin)
         self.row.setSpacing(round(6 * HUD_SCALE))
+        self.lock_button = QToolButton(self)
+        self.lock_button.setCheckable(True)
+        self.lock_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.lock_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.lock_button.setIconSize(QSize(24, 24))
+        self.lock_button.setFixedSize(30, 30)
+        self.lock_button.toggled.connect(self.set_locked)
+        self.row.addWidget(self.lock_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.set_locked(True)
+
+    def set_locked(self, locked):
+        self.locked = locked
+        self.drag_offset = None
+        filename = "lock_on.svg" if locked else "lock_off.svg"
+        self.lock_button.setIcon(QIcon(str(resource_path("ui") / filename)))
+        self.lock_button.setToolTip("已鎖定，點擊解鎖" if locked else "已解鎖，點擊鎖定")
+        self.lock_button.setAccessibleName("解鎖 HUD" if locked else "鎖定 HUD")
+        self.setCursor(Qt.CursorShape.ArrowCursor if locked else Qt.CursorShape.OpenHandCursor)
 
     def update_bindings(self, bindings):
         self.countdown_labels.clear()
-        while self.row.count():
-            widget = self.row.takeAt(0).widget()
+        while self.row.count() > 1:
+            widget = self.row.takeAt(1).widget()
             widget.hide()
             widget.deleteLater()
         for binding in bindings:
@@ -96,7 +116,7 @@ class HUDOverlay(QWidget):
             self.countdown_labels.setdefault(binding.value, []).append(countdown)
             column.addWidget(visual, 0, Qt.AlignmentFlag.AlignHCenter)
             self.row.addWidget(item)
-        if not self.row.count():
+        if self.row.count() == 1:
             placeholder = QLabel("尚未綁定 Stratagem", self)
             placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             self.row.addWidget(placeholder)
@@ -154,8 +174,11 @@ class HUDOverlay(QWidget):
         if not self.deadlines:
             self.countdown_timer.stop()
 
-    def position_hud(self):
-        if self.moved_by_user:
+    def position_hud(self, reset=False):
+        if reset:
+            self.moved_by_user = False
+            self.drag_offset = None
+        elif self.locked or self.moved_by_user:
             return
         area = self.screen().geometry()
         self.move(
@@ -165,10 +188,10 @@ class HUDOverlay(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        self.position_hud()
+        self.position_hud(reset=True)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+        if not self.locked and event.button() == Qt.MouseButton.LeftButton:
             self.drag_offset = event.globalPosition().toPoint() - self.pos()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
@@ -176,7 +199,7 @@ class HUDOverlay(QWidget):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self.drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+        if not self.locked and self.drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
             self.move(event.globalPosition().toPoint() - self.drag_offset)
             self.moved_by_user = True
             event.accept()
@@ -186,12 +209,12 @@ class HUDOverlay(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_offset = None
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            self.setCursor(Qt.CursorShape.ArrowCursor if self.locked else Qt.CursorShape.OpenHandCursor)
             event.accept()
         else:
             super().mouseReleaseEvent(event)
 
     def hideEvent(self, event):
         self.drag_offset = None
-        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.setCursor(Qt.CursorShape.ArrowCursor if self.locked else Qt.CursorShape.OpenHandCursor)
         super().hideEvent(event)

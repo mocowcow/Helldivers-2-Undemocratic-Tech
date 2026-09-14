@@ -1,1 +1,1 @@
-pyinstaller --onefile --noconsole --icon=icon.ico --add-data "icon.ico;." --add-data "stratagems-svg;stratagems-svg" --name "HD2 Undemocratic Tech" main.py
+pyinstaller --onefile --noconsole --icon=icon.ico --add-data "icon.ico;." --add-data "stratagems-svg;stratagems-svg" --add-data "ui/lock_on.svg;ui" --add-data "ui/lock_off.svg;ui" --name "HD2 Undemocratic Tech" main.py
