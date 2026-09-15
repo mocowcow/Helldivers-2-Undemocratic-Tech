@@ -5,6 +5,7 @@ import time
 import keyboard
 
 from game.actions import call_stratagem, send_chat
+from game.cooldowns import calculate_cooldown
 from stratagems import STRATAGEMS
 from hotkeys.models import Binding
 from hotkeys.keys import resolve_key
@@ -82,6 +83,7 @@ class BindingManager:
     def __init__(self, open_chat, on_stratagem_trigger=None):
         self.open_chat = open_chat
         self.on_stratagem_trigger = on_stratagem_trigger
+        self.cooldown_upgrades = frozenset()
         self._enabled = False
         self._bindings = {}
         self._removers = {}
@@ -96,10 +98,15 @@ class BindingManager:
         def invoke():
             if self._enabled:
                 if binding.action == "stratagem" and self.on_stratagem_trigger:
-                    self.on_stratagem_trigger(binding.value, time.monotonic())
+                    cooldown = calculate_cooldown(STRATAGEMS[binding.value], self.cooldown_upgrades)
+                    self.on_stratagem_trigger(binding.value, time.monotonic(), cooldown)
                 callback()
 
         return bind_key(binding.key, invoke)
+
+    def set_cooldown_upgrades(self, upgrades):
+        # Immutable snapshot read by the keyboard callback without accessing Qt.
+        self.cooldown_upgrades = frozenset(upgrades)
 
     def enable(self):
         if self._enabled:

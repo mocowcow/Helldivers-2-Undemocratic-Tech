@@ -6,7 +6,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from config.defaults import DEFAULT_BINDINGS, INPUT_PAUSE
-from config.settings import load_bindings
+from config.settings import load_settings
 from game.actions import send_chat
 from hotkeys.manager import BindingManager
 from hotkeys.validation import effective_bindings
@@ -26,8 +26,9 @@ def main():
     chat_input = ChatInput(send_chat)
     bindings = BindingManager(chat_input.request)
     load_error = ""
+    cooldown_modifiers = None
     try:
-        saved_bindings = load_bindings()
+        saved_bindings, cooldown_modifiers = load_settings()
     except (OSError, ValueError) as error:
         logger.exception("設定載入失敗，使用預設綁定")
         saved_bindings = DEFAULT_BINDINGS
@@ -36,7 +37,7 @@ def main():
     try:
         bindings.replace(effective_bindings(saved_bindings))
         pdi.PAUSE = INPUT_PAUSE
-        panel = BindingPanel(bindings, saved_bindings, load_error)
+        panel = BindingPanel(bindings, saved_bindings, load_error, cooldown_modifiers)
         bindings.on_stratagem_trigger = panel.hud_overlay.cooldown_requested.emit
         panel.show()
         return app.exec()

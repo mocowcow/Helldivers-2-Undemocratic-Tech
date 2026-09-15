@@ -19,6 +19,7 @@ Windows 上的 Helldivers 2 快捷鍵與聊天輔助工具，使用 PySide6、ke
 | `hotkeys/validation.py` | 綁定驗證及排除未綁定項目 |
 | `hotkeys/keys.py` | 按鍵名稱轉換為 scan code 與數字鍵盤身分 |
 | `game/actions.py` | 聊天文字與戰略配備按鍵序列輸入 |
+| `game/cooldowns.py` | 冷卻修正適用範圍與倍率連乘計算 |
 | `game/windows.py` | 聊天視窗使用的 Win32 前景查詢與聚焦函數 |
 | `config/defaults.py` | 預設綁定及輸入間隔 |
 | `config/settings.py` | JSON 設定讀寫及原子替換 |
@@ -81,7 +82,11 @@ build.bat
 
 同時勾選「HUD overlay」與「預估cd」後，觸發 Stratagem 熱鍵會依 `cooldown` 秒數開始預估倒數，圖示中央顯示 `分:秒`。再次觸發同一 Stratagem 會重新計時；同一 Stratagem 綁定多個按鍵時，共用倒數。`cooldown = 0` 不啟動倒數。
 
-取消「預估cd」會停止更新並清除全部倒數，重新勾選不恢復。取消「HUD overlay」只隱藏 HUD 並停止接受新的倒數觸發，既有倒數繼續，重新顯示時呈現剩餘時間。取消熱鍵「啟用」只解除綁定，既有倒數繼續。倒數不確認投擲或呼叫是否成功，也不套用遊戲中的冷卻修正。
+取消「預估cd」會停止更新並清除全部倒數，重新勾選不恢復。取消「HUD overlay」只隱藏 HUD 並停止接受新的倒數觸發，既有倒數繼續，重新顯示時呈現剩餘時間。取消熱鍵「啟用」只解除綁定，既有倒數繼續。倒數不確認投擲或呼叫是否成功。
+
+Settings 提供冷卻修正勾選，升級預設勾選、軌道震盪預設不勾選，目前支援 Streamlined Request Process、Hand Carts、Zero-G Breech Loading、Liquid-Ventilated Cockpit、Morale Augmentation、Synthetic Supplementation，以及使所有戰略配備冷卻增加 25% 的 Orbital Fluctuations。僅計算手動選擇的效果，不自動讀取遊戲狀態。
+
+熱鍵觸發時逐一套用適用的 `CooldownModifier`，每項使用 `cooldown *= (100 − percent) / 100`；`percent` 正數表示減免，負數表示增加。支援武器 480 秒，套用 -10%、-5% 與 Orbital Fluctuations 後為 `480 × 0.9 × 0.95 × 1.25 = 513` 秒。每套用一項修正後沿用 `round()` 取整，HUD 沿用剩餘秒數向上取整顯示。原始常數不會被修改，正在進行的倒數也不受後續勾選變更影響。按下 Settings 的「儲存」會將各修正的勾選狀態寫入綁定 JSON 的 `cooldown_modifiers` 欄位，重新啟動時還原；未儲存的變更不會保留。設定檔不存在或缺少修正項目時，使用各項預設值：升級勾選，Orbital Fluctuations 不勾選。
 
 ## 執行紀錄
 

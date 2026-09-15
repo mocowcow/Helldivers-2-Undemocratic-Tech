@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from config.settings import save_bindings
+from config.settings import save_settings
 from hotkeys.models import Binding
 from hotkeys.validation import effective_bindings
 from stratagems import STRATAGEMS
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class BindingPanel(QWidget):
-    def __init__(self, manager, bindings, load_error=""):
+    def __init__(self, manager, bindings, load_error="", cooldown_modifiers=None):
         super().__init__()
         self.manager = manager
         self.hud_overlay = HUDOverlay()
@@ -65,7 +65,9 @@ class BindingPanel(QWidget):
             self.pages.addWidget(table)
         self.stratagem_table.changed.connect(self.refresh_hud_overlay)
 
-        self.settings_page = SettingsPage(bindings)
+        self.settings_page = SettingsPage(bindings, cooldown_modifiers)
+        self.settings_page.cooldown_upgrades_changed.connect(self.manager.set_cooldown_upgrades)
+        self.settings_page.emit_cooldown_upgrades()
         self.settings_page.save_requested.connect(self.save)
         self.pages.addWidget(self.settings_page)
         layout.addWidget(self.pages)
@@ -157,7 +159,7 @@ class BindingPanel(QWidget):
 
     def save(self):
         try:
-            save_bindings(self.draft())
+            save_settings(self.draft(), self.settings_page.cooldown_modifiers())
         except Exception as error:
             logger.exception("儲存設定失敗")
             self.status.setText(f"儲存失敗：{error}")

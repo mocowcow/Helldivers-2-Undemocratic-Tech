@@ -14,7 +14,7 @@ HUD_SCALE = 0.75
 
 
 class HUDOverlay(QWidget):
-    cooldown_requested = Signal(str, float)
+    cooldown_requested = Signal(str, float, float)
 
     def __init__(self):
         super().__init__()
@@ -142,15 +142,14 @@ class HUDOverlay(QWidget):
                 label.clear()
                 label.hide()
 
-    @Slot(str, float)
-    def start_cooldown(self, name, triggered_at):
+    @Slot(str, float, float)
+    def start_cooldown(self, name, triggered_at, cooldown):
         # Discard queued triggers from before the latest enabling of both options.
         if not self.cooldown_enabled or triggered_at < self.enabled_since:
             return
-        stratagem = STRATAGEMS.get(name)
-        if stratagem is None or stratagem.cooldown <= 0:
+        if name not in STRATAGEMS or cooldown <= 0:
             return
-        self.deadlines[name] = triggered_at + stratagem.cooldown
+        self.deadlines[name] = triggered_at + cooldown
         self.refresh_countdowns()
         if self.deadlines:
             self.countdown_timer.start()
