@@ -6,8 +6,9 @@ from stratagems import STRATAGEMS
 def validate_bindings(bindings):
     keys = set()
     open_chat_count = 0
+    recognize_terminal_count = 0
     for binding in bindings:
-        if binding.action not in ("stratagem", "chat", "open_chat"):
+        if binding.action not in ("stratagem", "chat", "open_chat", "recognize_terminal"):
             raise ValueError(f"未知的綁定動作：{binding.action}")
         if binding.action == "stratagem" and binding.value not in STRATAGEMS:
             raise ValueError(f"未知的戰略配備：{binding.value}")
@@ -15,6 +16,10 @@ def validate_bindings(bindings):
             open_chat_count += 1
             if open_chat_count > 1:
                 raise ValueError("開啟聊天視窗只能設定一個快捷鍵。")
+        if binding.action == "recognize_terminal":
+            recognize_terminal_count += 1
+            if recognize_terminal_count > 1:
+                raise ValueError("Terminal 辨識只能設定一個快捷鍵。")
         if not binding.key:
             continue
         if binding.action == "chat" and not binding.value.strip():

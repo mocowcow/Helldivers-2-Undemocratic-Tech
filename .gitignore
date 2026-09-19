@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Offline recognition debug output
+/debug/terminal/
+
+# Local recognition datasets (not runtime assets)
+/samples/

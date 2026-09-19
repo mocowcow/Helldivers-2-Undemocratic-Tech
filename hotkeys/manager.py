@@ -80,8 +80,9 @@ def bind_chat(key, text):
 
 
 class BindingManager:
-    def __init__(self, open_chat, on_stratagem_trigger=None):
+    def __init__(self, open_chat, on_stratagem_trigger=None, *, recognize_terminal=None):
         self.open_chat = open_chat
+        self.recognize_terminal = recognize_terminal
         self.on_stratagem_trigger = on_stratagem_trigger
         self.cooldown_upgrades = frozenset()
         self._enabled = False
@@ -136,6 +137,10 @@ class BindingManager:
             return partial(send_chat, binding.value)
         if binding.action == "open_chat":
             return partial(self.open_chat)
+        if binding.action == "recognize_terminal":
+            if self.recognize_terminal is None:
+                raise ValueError("Terminal 辨識服務未設定。")
+            return partial(self.recognize_terminal)
         raise ValueError(f"Unknown binding action: {binding.action}")
 
     def bind(self, binding):

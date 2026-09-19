@@ -2,7 +2,10 @@
 
 Windows 上的 Helldivers 2 快捷鍵與聊天輔助工具，使用 PySide6、keyboard 及 pydirectinput。
 
+Terminal 方向辨識由主程式熱鍵觸發：截圖、自動定位 ROI、辨識後輸入方向；超時或失敗顯示提示並保存截圖。模組說明見 [vision/README.md](vision/README.md)。
+
 ## 專案結構
+
 
 | 路徑 | 責任 |
 | --- | --- |
@@ -49,7 +52,7 @@ build.bat
 ## 設定行為
 
 1. 在 Stratagem binding 與 Chat binding 分頁設定戰略配備或預設聊天文字，點擊快捷鍵欄位後按下單一按鍵；放開確定，Esc 清除該綁定。
-2. 在 Settings 設定開啟聊天輸入視窗的快捷鍵。
+2. 在 Settings 設定開啟聊天輸入視窗及 Terminal 辨識的快捷鍵。
 3. 勾選主 UI 的「啟用」後，依目前內容註冊熱鍵。所有綁定欄位與增加／刪除操作會鎖定；取消勾選後解除綁定並解鎖。
 4. Settings 的「儲存」獨立保存目前設定；啟用與停用不會自動儲存。分頁切換、儲存與開啟儲存路徑在啟用期間仍可操作。
 

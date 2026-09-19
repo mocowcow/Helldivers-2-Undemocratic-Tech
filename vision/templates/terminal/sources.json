@@ -1,0 +1,94 @@
+[
+  {
+    "direction": "left",
+    "source": "20260917135431_1.jpg",
+    "roi": [
+      830,
+      445,
+      38,
+      46
+    ],
+    "output": "vision/templates/terminal/left/sample_01.png"
+  },
+  {
+    "direction": "up",
+    "source": "20260917135431_1.jpg",
+    "roi": [
+      943,
+      463,
+      39,
+      49
+    ],
+    "output": "vision/templates/terminal/up/sample_01.png"
+  },
+  {
+    "direction": "down",
+    "source": "20260917135431_1.jpg",
+    "roi": [
+      984,
+      467,
+      39,
+      48
+    ],
+    "output": "vision/templates/terminal/down/sample_01.png"
+  },
+  {
+    "direction": "right",
+    "source": "20260917140122_1.jpg",
+    "roi": [
+      982,
+      470,
+      40,
+      46
+    ],
+    "output": "vision/templates/terminal/right/sample_01.png"
+  },
+  {
+    "direction": "down",
+    "source": "20260917135743_1.jpg",
+    "roi": [
+      773,
+      498,
+      39,
+      39
+    ],
+    "output": "vision/templates/terminal/down/wide.png",
+    "view": "wide"
+  },
+  {
+    "direction": "up",
+    "source": "20260917135743_1.jpg",
+    "roi": [
+      825,
+      506,
+      41,
+      40
+    ],
+    "output": "vision/templates/terminal/up/wide.png",
+    "view": "wide"
+  },
+  {
+    "direction": "right",
+    "source": "20260917135743_1.jpg",
+    "roi": [
+      874,
+      514,
+      48,
+      38
+    ],
+    "output": "vision/templates/terminal/right/wide.png",
+    "view": "wide"
+  },
+  {
+    "direction": "left",
+    "source": "20260917135743_1.jpg",
+    "roi": [
+      1119,
+      544,
+      57,
+      43
+    ],
+    "output": "vision/templates/terminal/left/wide.png",
+    "view": "wide"
+  }
+]

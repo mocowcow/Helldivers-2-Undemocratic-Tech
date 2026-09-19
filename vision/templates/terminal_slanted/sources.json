@@ -1,0 +1,50 @@
+[
+  {
+    "direction": "left",
+    "source": "20260917135419_1.jpg",
+    "roi": [
+      873,
+      414,
+      38,
+      41
+    ],
+    "output": "vision/templates/terminal_slanted/left/slanted.png",
+    "view": "slanted"
+  },
+  {
+    "direction": "up",
+    "source": "20260917135419_1.jpg",
+    "roi": [
+      949,
+      455,
+      35,
+      47
+    ],
+    "output": "vision/templates/terminal_slanted/up/slanted.png",
+    "view": "slanted"
+  },
+  {
+    "direction": "down",
+    "source": "20260917135419_1.jpg",
+    "roi": [
+      987,
+      473,
+      36,
+      47
+    ],
+    "output": "vision/templates/terminal_slanted/down/slanted.png",
+    "view": "slanted"
+  },
+  {
+    "direction": "right",
+    "source": "20260917140120_1.jpg",
+    "roi": [
+      988,
+      479,
+      35,
+      40
+    ],
+    "output": "vision/templates/terminal_slanted/right/slanted.png",
+    "view": "slanted"
+  }
+]

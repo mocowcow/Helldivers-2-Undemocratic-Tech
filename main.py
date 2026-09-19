@@ -14,17 +14,34 @@ from resources import resource_path
 from ui.binding_panel import BindingPanel
 from ui.chat_input import ChatInput
 from diagnostics import configure_logging, LOG_PATH
+from vision.capture import TerminalRecognition
 
 
 logger = logging.getLogger(__name__)
+_terminal_recognition = None
+
+
+def request_terminal_recognition():
+    """Hotkey callback: capture primary screen, recognize and send directions.
+
+    After main() initializes the service, register using:
+        unbind = bind_key(key, request_terminal_recognition)
+    The caller owns that hotkey registration and its returned unbind callback.
+    """
+    service = _terminal_recognition
+    if service is None:
+        logger.warning("Terminal 辨識服務尚未初始化或已關閉")
+        return False
+    return service.request()
 
 
 def main():
+    global _terminal_recognition
     app = QApplication([])
     app.setWindowIcon(QIcon(str(resource_path("icon.ico"))))
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
-    bindings = BindingManager(chat_input.request)
+    bindings = BindingManager(chat_input.request, recognize_terminal=request_terminal_recognition)
     load_error = ""
     cooldown_modifiers = None
     try:
@@ -35,6 +52,7 @@ def main():
         load_error = str(error)
 
     try:
+        _terminal_recognition = TerminalRecognition(app)
         bindings.replace(effective_bindings(saved_bindings))
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error, cooldown_modifiers)
@@ -42,6 +60,9 @@ def main():
         panel.show()
         return app.exec()
     finally:
+        if _terminal_recognition is not None:
+            _terminal_recognition.close()
+            _terminal_recognition = None
         try:
             bindings.disable()
         finally:

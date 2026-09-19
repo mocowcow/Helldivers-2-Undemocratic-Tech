@@ -39,6 +39,15 @@ class SettingsPage(QWidget):
         self.clear_key.clicked.connect(self.open_chat_key.clear_binding)
         chat_key_row.addWidget(self.clear_key)
         form.addRow("開啟聊天視窗快捷鍵", chat_key_row)
+        terminal_key = next((b.key for b in bindings if b.action == "recognize_terminal"), "")
+        self.terminal_key = KeyInput(terminal_key)
+        self.terminal_key.setToolTip("截取主螢幕、自動定位並辨識方向；2 秒內成功才輸入 W/A/S/D，超時或辨識失敗均顯示提示並記錄 log。")
+        terminal_key_row = QHBoxLayout()
+        terminal_key_row.addWidget(self.terminal_key)
+        self.clear_terminal_key = QPushButton("清除")
+        self.clear_terminal_key.clicked.connect(self.terminal_key.clear_binding)
+        terminal_key_row.addWidget(self.clear_terminal_key)
+        form.addRow("Terminal 辨識快捷鍵", terminal_key_row)
         hint = QLabel(
             "冷卻修正：各效果逐一相乘，於下次熱鍵觸發時計算；不改變已開始的倒數。"
         )
@@ -74,10 +83,18 @@ class SettingsPage(QWidget):
     def set_bindings_editable(self, editable):
         self.open_chat_key.setEnabled(editable)
         self.clear_key.setEnabled(editable)
+        self.terminal_key.setEnabled(editable)
+        self.clear_terminal_key.setEnabled(editable)
 
     def draft(self):
-        key = self.open_chat_key.key
-        return (Binding(key, "open_chat"),) if key else ()
+        return tuple(
+            Binding(key, action)
+            for key, action in (
+                (self.open_chat_key.key, "open_chat"),
+                (self.terminal_key.key, "recognize_terminal"),
+            )
+            if key
+        )
 
     def open_settings_folder(self):
         folder = SETTINGS_PATH.parent
