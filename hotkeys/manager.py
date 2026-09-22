@@ -86,6 +86,7 @@ class BindingManager:
         self.on_stratagem_trigger = on_stratagem_trigger
         self.cooldown_upgrades = frozenset()
         self._enabled = False
+        self._suspended = False
         self._bindings = {}
         self._removers = {}
 
@@ -97,7 +98,7 @@ class BindingManager:
         callback = self._callback(binding)
 
         def invoke():
-            if self._enabled:
+            if self._enabled and not self._suspended:
                 if binding.action == "stratagem" and self.on_stratagem_trigger:
                     cooldown = calculate_cooldown(STRATAGEMS[binding.value], self.cooldown_upgrades)
                     self.on_stratagem_trigger(binding.value, time.monotonic(), cooldown)
@@ -112,23 +113,45 @@ class BindingManager:
     def enable(self):
         if self._enabled:
             return
+        if not self._suspended:
+            self._install_hooks()
+        self._enabled = True
+        logger.info("已啟用綁定 count=%s suspended=%s", len(self._removers), self._suspended)
+
+    def _install_hooks(self):
         try:
             for binding in self._bindings.values():
                 self._removers[binding.key] = self._register(binding)
         except Exception:
-            self.disable()
+            self._remove_hooks()
             raise
-        self._enabled = True
-        logger.info("已啟用綁定 count=%s", len(self._removers))
 
     def disable(self):
-        count = len(self._removers)
         self._enabled = False
+        self._remove_hooks()
+
+    def _remove_hooks(self):
+        count = len(self._removers)
         for key in tuple(self._removers):
             self._removers[key]()
             del self._removers[key]
         if count:
             logger.info("已解除綁定 count=%s", count)
+
+    def suspend(self):
+        """Temporarily remove hooks without changing the user's enabled state."""
+        self._suspended = True
+        self._remove_hooks()
+        logger.info("聊天期間暫停快捷鍵")
+
+    def resume(self):
+        """Restore hooks only if the user still wants bindings enabled."""
+        if not self._suspended:
+            return
+        if self._enabled:
+            self._install_hooks()
+        self._suspended = False
+        logger.info("聊天結束，解除快捷鍵暫停 enabled=%s", self._enabled)
 
     def _callback(self, binding):
         if binding.action == "stratagem":
@@ -155,11 +178,11 @@ class BindingManager:
         previous = self._bindings.get(key)
         self.unbind(key)
         try:
-            if self._enabled:
+            if self._enabled and not self._suspended:
                 self._removers[key] = self._register(binding)
         except Exception:
             if previous is not None:
-                if self._enabled:
+                if self._enabled and not self._suspended:
                     self._removers[key] = self._register(previous)
                 self._bindings[key] = previous
             raise

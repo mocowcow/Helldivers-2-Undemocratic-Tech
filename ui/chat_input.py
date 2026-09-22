@@ -17,6 +17,13 @@ class ChatInput(QLineEdit):
     def __init__(self, send_chat):
         super().__init__()
         self.send_chat = send_chat
+        self.on_open = None
+        self.on_finished = None
+        self._closing = False
+        self._pending_text = ""
+        self._delivery_timer = QTimer(self)
+        self._delivery_timer.setSingleShot(True)
+        self._delivery_timer.timeout.connect(lambda: self.deliver(self._pending_text))
         self.active = Event()
         self.target = None
         self.composing = False
@@ -31,12 +38,30 @@ class ChatInput(QLineEdit):
 
     def request(self):
         # Global keyboard callbacks must not manipulate Qt widgets directly.
-        if not self.active.is_set():
+        if not self._closing and not self.active.is_set():
             self.active.set()
-            self.open_requested.emit(get_foreground_window())
+            try:
+                self.open_requested.emit(get_foreground_window())
+            except Exception:
+                self.active.clear()
+                raise
 
     @Slot(object)
     def open_input(self, target):
+        if self._closing:
+            self.active.clear()
+            return
+        self.active.set()
+        try:
+            if self.on_open:
+                self.on_open()
+            self._open_input(target)
+        except Exception:
+            logger.exception("開啟聊天視窗失敗")
+            self.hide()
+            self._finish_input()
+
+    def _open_input(self, target):
         logger.info("開啟聊天視窗 target=%s", target)
         self.target = target
         self.composing = False
@@ -75,10 +100,19 @@ class ChatInput(QLineEdit):
 
     def cancel(self):
         logger.info("取消聊天輸入")
+        self._delivery_timer.stop()
         self.hide()
-        if self.target:
-            set_foreground_window(self.target)
+        try:
+            if self.target and not self._closing:
+                set_foreground_window(self.target)
+        finally:
+            self._finish_input()
+
+    def _finish_input(self):
+        was_active = self.active.is_set()
         self.active.clear()
+        if was_active and not self._closing and self.on_finished:
+            self.on_finished()
 
     def submit(self):
         text = self.text()
@@ -88,9 +122,12 @@ class ChatInput(QLineEdit):
         self.hide()
         if self.target:
             set_foreground_window(self.target)
-        QTimer.singleShot(150, lambda: self.deliver(text))
+        self._pending_text = text
+        self._delivery_timer.start(150)
 
     def deliver(self, text):
+        if self._closing or not self.active.is_set():
+            return
         if not self.target or get_foreground_window() != self.target:
             logger.warning("無法切回原視窗，文字尚未送出 target=%s", self.target)
             self.show_and_focus()
@@ -101,7 +138,14 @@ class ChatInput(QLineEdit):
             logger.exception("聊天輸入中斷，請確認遊戲聊天狀態")
             self.show_and_focus()
         else:
-            self.active.clear()
+            self._finish_input()
+
+    def shutdown(self):
+        """Stop pending delivery without restoring bindings during app exit."""
+        self._closing = True
+        self._delivery_timer.stop()
+        self.hide()
+        self.active.clear()
 
     def closeEvent(self, event):
         self.cancel()

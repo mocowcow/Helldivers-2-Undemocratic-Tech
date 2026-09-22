@@ -42,6 +42,9 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
     bindings = BindingManager(chat_input.request, recognize_terminal=request_terminal_recognition)
+    chat_input.on_open = bindings.suspend
+    app.aboutToQuit.connect(bindings.disable)
+    app.aboutToQuit.connect(chat_input.shutdown)
     load_error = ""
     cooldown_modifiers = None
     try:
@@ -56,10 +59,24 @@ def main():
         bindings.replace(effective_bindings(saved_bindings))
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error, cooldown_modifiers)
+
+        def resume_after_chat():
+            try:
+                bindings.resume()
+            except Exception:
+                logger.exception("聊天結束後恢復快捷鍵失敗，已停用綁定")
+                bindings.disable()
+                panel.enable_checkbox.setChecked(False)
+                # Clear the suspension now that no hooks need restoring.
+                bindings.resume()
+                panel.status.setText("恢復快捷鍵失敗，已停用；請重新勾選啟用。")
+
+        chat_input.on_finished = resume_after_chat
         bindings.on_stratagem_trigger = panel.hud_overlay.cooldown_requested.emit
         panel.show()
         return app.exec()
     finally:
+        chat_input.shutdown()
         if _terminal_recognition is not None:
             _terminal_recognition.close()
             _terminal_recognition = None
