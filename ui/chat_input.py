@@ -1,6 +1,8 @@
 from threading import Event
 import logging
 
+import keyboard
+
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import QLineEdit
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class ChatInput(QLineEdit):
     open_requested = Signal(object)
+    cancel_requested = Signal(object)
 
     def __init__(self, send_chat):
         super().__init__()
@@ -20,6 +23,9 @@ class ChatInput(QLineEdit):
         self.on_open = None
         self.on_finished = None
         self._closing = False
+        self._escape_enabled = Event()
+        self._escape_unhook = None
+        self._escape_session = None
         self._pending_text = ""
         self._delivery_timer = QTimer(self)
         self._delivery_timer.setSingleShot(True)
@@ -35,6 +41,8 @@ class ChatInput(QLineEdit):
         self.setFixedSize(200, 50)
         self.open_requested.connect(
             self.open_input, Qt.ConnectionType.QueuedConnection)
+        self.cancel_requested.connect(
+            self._cancel_unfocused, Qt.ConnectionType.QueuedConnection)
 
     def request(self):
         # Global keyboard callbacks must not manipulate Qt widgets directly.
@@ -77,12 +85,61 @@ class ChatInput(QLineEdit):
 
     def show_and_focus(self):
         self.active.set()
+        self._install_escape_hook()
         self.show()
         self.raise_()
         self.activateWindow()
         activate_foreground(int(self.winId()))
         if get_foreground_window() == int(self.winId()):
             self.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _install_escape_hook(self):
+        if self._escape_unhook is not None:
+            return
+        hwnd = int(self.winId())
+        session = object()
+        self._escape_session = session
+        swallowed = False
+
+        def handle_escape(event):
+            nonlocal swallowed
+            # Keyboard thread: query Win32 focus, never access Qt widgets.
+            if event.event_type == keyboard.KEY_DOWN:
+                if swallowed:
+                    return False
+                if (not self._closing and self._escape_enabled.is_set()
+                        and self.active.is_set() and get_foreground_window() != hwnd):
+                    swallowed = True
+                    return False
+            elif event.event_type == keyboard.KEY_UP and swallowed:
+                swallowed = False
+                self.cancel_requested.emit(session)
+                return False
+            # Let Qt / the input method handle Esc when this window is foreground.
+            return True
+
+        self._escape_unhook = keyboard.hook_key("esc", handle_escape, suppress=True)
+
+    def _remove_escape_hook(self):
+        self._escape_enabled.clear()
+        self._escape_session = None
+        if self._escape_unhook is not None:
+            self._escape_unhook()
+            self._escape_unhook = None
+
+    @Slot(object)
+    def _cancel_unfocused(self, session):
+        if (not self._closing and session is self._escape_session
+                and self.active.is_set() and self.isVisible()):
+            self.cancel(restore_focus=False)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._escape_enabled.set()
+
+    def hideEvent(self, event):
+        self._escape_enabled.clear()
+        super().hideEvent(event)
 
     def inputMethodEvent(self, event):
         self.composing = bool(event.preeditString())
@@ -98,12 +155,12 @@ class ChatInput(QLineEdit):
         else:
             super().keyPressEvent(event)
 
-    def cancel(self):
+    def cancel(self, *, restore_focus=True):
         logger.info("取消聊天輸入")
         self._delivery_timer.stop()
         self.hide()
         try:
-            if self.target and not self._closing:
+            if restore_focus and self.target and not self._closing:
                 set_foreground_window(self.target)
         finally:
             self._finish_input()
@@ -111,6 +168,7 @@ class ChatInput(QLineEdit):
     def _finish_input(self):
         was_active = self.active.is_set()
         self.active.clear()
+        self._remove_escape_hook()
         if was_active and not self._closing and self.on_finished:
             self.on_finished()
 
@@ -144,6 +202,7 @@ class ChatInput(QLineEdit):
         """Stop pending delivery without restoring bindings during app exit."""
         self._closing = True
         self._delivery_timer.stop()
+        self._remove_escape_hook()
         self.hide()
         self.active.clear()
 
