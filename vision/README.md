@@ -18,6 +18,7 @@
 | `deadline.py` | 辨識截止時間檢查 |
 | `detection.py` | 完整圖片中的箭頭列定位 |
 | `terminal.py` | 輪廓分割、模板比對、可信度與完整性檢查 |
+| `matching.py` | 批次計算模板正規化相關係數，共用平移搜尋的統計值 |
 | `refinements.py` | 辨識流程使用的有限視角校正 |
 | `templates/terminal/` | 一般箭頭模板 |
 | `templates/terminal_slanted/` | 斜視角箭頭模板 |

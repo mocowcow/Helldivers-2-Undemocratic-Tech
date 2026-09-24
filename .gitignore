@@ -224,3 +224,4 @@ __marimo__/
 
 # Local recognition datasets (not runtime assets)
 /samples/
+/failed/

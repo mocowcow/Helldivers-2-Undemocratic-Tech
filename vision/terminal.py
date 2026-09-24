@@ -1,6 +1,8 @@
 """Contour candidates and grayscale shape templates for one Terminal arrow row."""
 
 from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
+from contextvars import ContextVar
 import json
 from pathlib import Path
 
@@ -8,11 +10,13 @@ import cv2
 import numpy as np
 
 from .deadline import check_deadline
+from .matching import TemplateMatcher
 
 
 DIRECTIONS = ("up", "down", "left", "right")
 DEFAULT_TEMPLATES = Path(__file__).resolve().parent / "templates" / "terminal"
 SLANTED_TEMPLATES = Path(__file__).resolve().parent / "templates" / "terminal_slanted"
+_recognition_cache = ContextVar("terminal_recognition_cache", default=None)
 
 
 @dataclass(frozen=True)
@@ -64,12 +68,21 @@ def _grayscale(image):
     check_deadline()
     if not isinstance(image, np.ndarray) or image.dtype != np.uint8 or image.size == 0:
         raise ValueError("Expected a nonempty uint8 NumPy image.")
+    cache = _recognition_cache.get()
+    grays = cache.setdefault("grays", {}) if cache is not None else {}
+    if id(image) in grays:
+        return grays[id(image)][1]
     if image.ndim == 2:
-        return image.copy()
-    if image.ndim == 3 and image.shape[2] in (3, 4):
+        gray = image.copy()
+    elif image.ndim == 3 and image.shape[2] in (3, 4):
         conversion = cv2.COLOR_BGR2GRAY if image.shape[2] == 3 else cv2.COLOR_BGRA2GRAY
-        return cv2.cvtColor(image, conversion)
-    raise ValueError("Expected grayscale, BGR, or BGRA image.")
+        gray = cv2.cvtColor(image, conversion)
+    else:
+        raise ValueError("Expected grayscale, BGR, or BGRA image.")
+    if cache is not None and len(grays) < 128:
+        # Retain the source so Python cannot reuse its id during this request.
+        grays[id(image)] = (image, gray)
+    return gray
 
 
 def _threshold(gray):
@@ -80,6 +93,20 @@ def _threshold(gray):
 def _segment(gray, method):
     """Keep clean template processing independent of screenshot illumination."""
     check_deadline()
+    cache = _recognition_cache.get()
+    if cache is None:
+        return _segment_uncached(gray, method)
+    segments = cache.setdefault("segments", {})
+    key = (method, gray.shape, gray.tobytes())
+    if key in segments:
+        return segments[key]
+    result = _segment_uncached(gray, method)
+    if len(segments) < 64:
+        segments[key] = result
+    return result
+
+
+def _segment_uncached(gray, method):
     if method == "otsu":
         return gray, _threshold(gray)
     if method == "tophat":
@@ -136,7 +163,27 @@ def _contour_mask(contour, bounds):
     return mask
 
 
+@lru_cache(maxsize=128)
+def _load_template(path, modified_ns, file_size, size, stretch, antialias):
+    # File metadata invalidates cached shapes when a template is replaced.
+    binary = _threshold(_grayscale(read_image(path)))
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise ValueError(f"No shape in template: {path}")
+    contour = max(contours, key=cv2.contourArea)
+    mask = _contour_mask(contour, cv2.boundingRect(contour))
+    normalized = _normalize(mask, size, stretch, antialias)
+    normalized.flags.writeable = False
+    return normalized
+
+
 def _load_templates(directory, config, stretch=False):
+    check_deadline()
+    cache = _recognition_cache.get()
+    banks = cache.setdefault("banks", {}) if cache is not None else {}
+    key = (Path(directory), config.normalized_size, stretch, config.antialias)
+    if key in banks:
+        return banks[key]
     templates = {}
     for direction in DIRECTIONS:
         files = sorted((Path(directory) / direction).glob("*.png"))
@@ -145,13 +192,13 @@ def _load_templates(directory, config, stretch=False):
         templates[direction] = []
         for path in files:
             check_deadline()
-            binary = _threshold(_grayscale(read_image(path)))
-            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours:
-                raise ValueError(f"No shape in template: {path}")
-            contour = max(contours, key=cv2.contourArea)
-            mask = _contour_mask(contour, cv2.boundingRect(contour))
-            templates[direction].append(_normalize(mask, config.normalized_size, stretch, config.antialias))
+            stat = path.stat()
+            templates[direction].append(_load_template(
+                path.resolve(), stat.st_mtime_ns, stat.st_size,
+                config.normalized_size, stretch, config.antialias))
+    # Rescan on the next request, not on every recursive fallback.
+    if cache is not None:
+        banks[key] = templates
     return templates
 
 
@@ -256,6 +303,19 @@ def recognize_directions(image, *, roi=None, template_dir=DEFAULT_TEMPLATES,
     Without roi, image must already be cropped to one arrow row.
     No screen capture, input injection, or UI dependency.
     """
+    # Recursive fallbacks share intermediates; separate requests never do.
+    token = None
+    if _recognition_cache.get() is None:
+        token = _recognition_cache.set({})
+    try:
+        return _recognize_directions(image, roi=roi, template_dir=template_dir,
+                                     config=config, debug_dir=debug_dir)
+    finally:
+        if token is not None:
+            _recognition_cache.reset(token)
+
+
+def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
     config = config or RecognitionConfig()
     if config.background_method not in ("tophat", "gaussian"):
         raise ValueError("background_method must be tophat or gaussian.")
@@ -515,9 +575,17 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
         additional = _load_templates(supplemental_templates, config, stretch)
         templates = {direction: variants + additional[direction]
                      for direction, variants in templates.items()}
+    cache = _recognition_cache.get()
+    matchers = cache.setdefault("matchers", {}) if cache is not None else {}
+    matcher_key = (Path(template_dir), config.normalized_size, stretch, config.antialias,
+                   config.alignment_radius, supplemental_templates)
+    if matcher_key not in matchers:
+        matchers[matcher_key] = TemplateMatcher(templates, config.alignment_radius)
+    matcher = matchers[matcher_key]
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    boxes_image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-    annotated = cv2.cvtColor(gray_full, cv2.COLOR_GRAY2BGR)
+    if debug:
+        boxes_image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        annotated = cv2.cvtColor(gray_full, cv2.COLOR_GRAY2BGR)
     candidates = []
     oversized = []
     for contour in contours:
@@ -526,8 +594,9 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
                  and config.min_size <= min(cw, ch)
                  and max(cw, ch) <= config.max_size
                  and config.min_aspect <= cw / ch <= config.max_aspect)
-        cv2.rectangle(boxes_image, (cx, cy), (cx + cw, cy + ch),
-                      (0, 200, 0) if valid else (0, 0, 200), 1)
+        if debug:
+            cv2.rectangle(boxes_image, (cx, cy), (cx + cw, cy + ch),
+                          (0, 200, 0) if valid else (0, 0, 200), 1)
         if valid:
             candidates.append((bounds, contour))
         elif max(cw, ch) > config.max_size and cv2.contourArea(contour) >= config.min_area:
@@ -537,22 +606,18 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
     for index, (bounds, contour) in enumerate(candidates):
         cx, cy, cw, ch = bounds
         normalized = _normalize(_contour_mask(contour, bounds), config.normalized_size, stretch, config.antialias)
-        scores = {
-            direction: max(_template_score(normalized, template, config.alignment_radius)
-                           for template in variants)
-            for direction, variants in templates.items()
-        }
+        scores = matcher.scores(normalized)
         ranked = sorted(scores, key=scores.get, reverse=True)
         best, runner_up = ranked[:2]
         accepted = (scores[best] >= config.score_threshold
                     and scores[best] - scores[runner_up] >= config.score_margin)
         records.append({"bounds": [x + cx, y + cy, cw, ch], "scores": scores,
                         "direction": best if accepted else None})
-        color = (0, 220, 0) if accepted else (0, 0, 255)
-        cv2.rectangle(annotated, (x + cx, y + cy), (x + cx + cw, y + cy + ch), color, 1)
-        cv2.putText(annotated, f"{best if accepted else 'unknown'} {scores[best]:.2f}",
-                    (x + cx, max(12, y + cy - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
         if debug:
+            color = (0, 220, 0) if accepted else (0, 0, 255)
+            cv2.rectangle(annotated, (x + cx, y + cy), (x + cx + cw, y + cy + ch), color, 1)
+            cv2.putText(annotated, f"{best if accepted else 'unknown'} {scores[best]:.2f}",
+                        (x + cx, max(12, y + cy - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
             _write_image(debug / f"arrow_{index:02d}.png", gray[cy:cy + ch, cx:cx + cw])
             _write_image(debug / f"arrow_{index:02d}_normalized.png", normalized)
     selected, row_line, row_error = _select_row(records, config)

@@ -8,11 +8,12 @@ import cv2
 import numpy as np
 
 from .deadline import check_deadline
+from .matching import TemplateMatcher
 
 from .terminal import (
     DEFAULT_TEMPLATES, SLANTED_TEMPLATES, RecognitionConfig, RecognitionError,
     _clean_mask, _contour_mask, _grayscale, _load_templates, _normalize,
-    _segment, _template_score, _write_image, recognize_directions,
+    _segment, _write_image, recognize_directions,
 )
 
 
@@ -31,48 +32,63 @@ class ScreenshotRecognitionError(RecognitionError):
         self.roi = roi
 
 
-def _candidates(gray, cleanup_sizes=(3,)):
+def _candidates(gray, cleanup_sizes=(3,), *, cache=None):
+    # Share work between cleanup strengths within this screenshot only.
+    cache = {} if cache is None else cache
     config = RecognitionConfig(antialias=True)
-    banks = [_load_templates(folder, config) for folder in (DEFAULT_TEMPLATES, SLANTED_TEMPLATES)]
-    templates = {d: sum((bank[d] for bank in banks), []) for d in banks[0]}
+    if "templates" not in cache:
+        banks = [_load_templates(folder, config) for folder in (DEFAULT_TEMPLATES, SLANTED_TEMPLATES)]
+        cache["templates"] = {d: sum((bank[d] for bank in banks), []) for d in banks[0]}
+    templates = cache["templates"]
+    if "matcher" not in cache:
+        cache["matcher"] = TemplateMatcher(templates, radius=2)
+    matcher = cache["matcher"]
+    score_cache = cache.setdefault("scores", {})
     scale = gray.shape[0] / 1080
     candidates = []
     for method in ("otsu", "tophat", "adaptive"):
-        raw = _segment(gray, method)[1]
+        check_deadline()
+        if method not in cache:
+            cache[method] = _segment(gray, method)[1]
+        raw = cache[method]
         for cleanup in cleanup_sizes:
             binary = _clean_mask(raw, cleanup)
             contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for contour in contours:
+                check_deadline()
                 bounds = x, y, w, h = cv2.boundingRect(contour)
                 if not (cv2.contourArea(contour) >= 70 * scale ** 2
                         and 10 * scale <= min(w, h) and max(w, h) <= 150 * scale
                         and 0.35 <= w / h <= 2.8):
                     continue
                 mask = _normalize(_contour_mask(contour, bounds), 48, antialias=True)
-                scores = sorted((max(_template_score(mask, t, 2) for t in variants)
-                                 for variants in templates.values()), reverse=True)
+                key = mask.tobytes()
+                scores = score_cache.get(key)
+                if scores is None:
+                    scores = sorted(matcher.scores(mask).values(), reverse=True)
+                    score_cache[key] = scores
                 if scores[0] >= 0.55:
                     candidates.append({"box": bounds, "score": scores[0],
                                        "anchor": scores[0] >= 0.78 and scores[0] - scores[1] >= 0.08})
     # Merge duplicate observations of the same contour across segmentations.
     selected = []
+    selected_boxes = np.empty((len(candidates), 4), dtype=np.int64)
     for item in sorted(candidates, key=lambda c: (c["anchor"], c["score"]), reverse=True):
+        check_deadline()
         x, y, w, h = item["box"]
-        duplicate = False
-        for old in selected:
-            a, b, c, d = old["box"]
-            intersection = max(0, min(x+w, a+c)-max(x, a)) * max(0, min(y+h, b+d)-max(y, b))
-            if intersection / min(w*h, c*d) > 0.6:
-                duplicate = True
-                break
+        boxes = selected_boxes[:len(selected)]
+        overlap = np.maximum(0, np.minimum((x+w, y+h), boxes[:, :2]+boxes[:, 2:])
+                             - np.maximum((x, y), boxes[:, :2]))
+        duplicate = np.any(overlap[:, 0]*overlap[:, 1]
+                           / np.minimum(w*h, boxes[:, 2]*boxes[:, 3]) > 0.6)
         if not duplicate:
+            selected_boxes[len(selected)] = item["box"]
             selected.append(item)
     return selected
 
 
-def _locate_arrow_row(image, *, cleanup_size=3, debug_dir=None):
-    gray = _grayscale(image)
-    candidates = _candidates(gray, (cleanup_size,))
+def _locate_arrow_row(gray, *, cleanup_size=3, debug_dir=None, cache=None):
+    candidates = _candidates(gray, (cleanup_size,), cache=cache)
     anchors = [c for c in candidates if c["anchor"]][:100]
     if len(anchors) < 3:
         raise RecognitionError("No reliable arrow row found in the screenshot.")
@@ -129,11 +145,11 @@ def _locate_arrow_row(image, *, cleanup_size=3, debug_dir=None):
             x, y, w, h = c["box"]
             # Adaptive thresholding can turn faint panel texture into a weak
             # extra symbol. Keep genuine shape anchors regardless of brightness.
-            if not c["anchor"] and contrast(c["box"]) < row_contrast * 0.25:
-                continue
             residual = abs(y+h/2-slope*(x+w/2)-intercept)/np.hypot(slope, 1)
             if (c not in chosen and mw*0.4 < w < mw*2 and mh*0.4 < h < mh*2
                     and residual < mh*0.5 and left-2*mw < x+w/2 < right+2*mw):
+                if not c["anchor"] and contrast(c["box"]) < row_contrast * 0.25:
+                    continue
                 additions.append(c)
         if not additions:
             break
@@ -165,10 +181,12 @@ def _locate_arrow_row(image, *, cleanup_size=3, debug_dir=None):
 def locate_arrow_row(image, *, debug_dir=None):
     """Compare weak and strong cleanup without replacing one row's end symbols."""
     detections = []
+    gray = _grayscale(image)
+    cache = {}
     for size in (3, 5):
         try:
             detections.append(_locate_arrow_row(
-                image, cleanup_size=size,
+                gray, cleanup_size=size, cache=cache,
                 debug_dir=Path(debug_dir)/f"locate{size}" if debug_dir else None))
         except RecognitionError:
             continue
