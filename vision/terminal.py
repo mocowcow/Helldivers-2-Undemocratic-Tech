@@ -2,7 +2,8 @@
 
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 
@@ -111,8 +112,7 @@ def _segment_uncached(gray, method):
         return gray, _threshold(gray)
     if method == "tophat":
         # Remove background structures larger than the observed arrow strokes.
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61, 61))
-        corrected = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
+        corrected = _elliptic_tophat(gray)
         return corrected, _threshold(corrected)
     if method == "adaptive":
         return gray, cv2.adaptiveThreshold(
@@ -124,6 +124,35 @@ def _segment_uncached(gray, method):
                                   0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         return corrected, _threshold(corrected)
     raise ValueError(f"Unknown segmentation method: {method}")
+
+
+@lru_cache(maxsize=1)
+def _ellipse_rectangles():
+    """Exact union of centered rectangles for OpenCV's 61-pixel ellipse."""
+    ellipse = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61, 61))
+    rectangles = []
+    seen = set()
+    for y in range(31):
+        width = int(ellipse[y].sum())
+        if width not in seen:
+            rectangles.append(np.ones((61 - 2*y, width), dtype=np.uint8))
+            seen.add(width)
+    return rectangles
+
+
+def _elliptic_tophat(gray):
+    # Erosion over a union is the minimum of its erosions; dilation is the
+    # maximum. Rectangular kernels use OpenCV's faster separable operations.
+    rectangles = _ellipse_rectangles()
+    eroded = cv2.erode(gray, rectangles[0])
+    for kernel in rectangles[1:]:
+        check_deadline()
+        cv2.min(eroded, cv2.erode(gray, kernel), eroded)
+    opened = cv2.dilate(eroded, rectangles[0])
+    for kernel in rectangles[1:]:
+        check_deadline()
+        cv2.max(opened, cv2.dilate(eroded, kernel), opened)
+    return cv2.subtract(gray, opened)
 
 
 def _clean_mask(binary, size=3):
@@ -412,30 +441,36 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
             and config.clean_thin_noise and config.cleanup_size == 3):
         from .refinements import horizontal_views
 
+        def recognize_view(shear, view, background):
+            label = f"view_{shear:+.3f}_{background}"
+            attempt = {"method": background, "shear": shear,
+                       "debug_subdir": label, "error": None}
+            folder = Path(debug_dir) / label if debug_dir is not None else None
+            if folder is not None:
+                folder.mkdir(parents=True, exist_ok=True)
+                _write_image(folder / "input.png", view)
+            try:
+                attempt["sequence"] = recognize_directions(
+                    view, template_dir=template_dir,
+                    config=replace(config, view_fallback=False,
+                                   background_method=background,
+                                   alignment_fallback=False, antialias_fallback=False,
+                                   template_fallback=False), debug_dir=folder)
+            except RecognitionError:
+                attempt["error"] = "Corrected view rejected."
+            return attempt
+
         successful = []
-        for shear, view in horizontal_views(image, roi):
-            for background in ("tophat", "gaussian"):
-                if shear == 0 and background == config.background_method:
-                    continue
-                label = f"view_{shear:+.3f}_{background}"
-                attempt = {"method": background, "shear": shear,
-                           "debug_subdir": label, "error": None}
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="terminal-view") as workers:
+            pending = [workers.submit(copy_context().run, recognize_view, shear, view, background)
+                       for shear, view in horizontal_views(image, roi)
+                       for background in ("tophat", "gaussian")
+                       if shear != 0 or background != config.background_method]
+            # Preserve trial order and compare every successful result.
+            for future in pending:
+                attempt = future.result()
                 attempts.append(attempt)
-                folder = Path(debug_dir) / label if debug_dir is not None else None
-                if folder is not None:
-                    folder.mkdir(parents=True, exist_ok=True)
-                    _write_image(folder / "input.png", view)
-                try:
-                    candidate = recognize_directions(
-                        view, template_dir=template_dir,
-                        config=replace(config, view_fallback=False,
-                                       background_method=background,
-                                       alignment_fallback=False, antialias_fallback=False,
-                                       template_fallback=False), debug_dir=folder)
-                except RecognitionError:
-                    attempt["error"] = "Corrected view rejected."
-                else:
-                    attempt["sequence"] = candidate
+                if attempt["error"] is None:
                     successful.append(attempt)
         if successful:
             if all(item["sequence"] == successful[0]["sequence"] for item in successful):
@@ -542,7 +577,7 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
 
 
 def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=False,
-                      supplemental_templates=None):
+                               supplemental_templates=None):
     if config.cleanup_size not in (3, 5):
         raise ValueError("cleanup_size must be 3 or 5.")
     if not (0 <= config.score_threshold <= 1 and 0 <= config.score_margin <= 2):

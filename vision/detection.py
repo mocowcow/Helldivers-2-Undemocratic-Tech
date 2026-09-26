@@ -178,10 +178,14 @@ def _locate_arrow_row(gray, *, cleanup_size=3, debug_dir=None, cache=None):
     return detection
 
 
-def locate_arrow_row(image, *, debug_dir=None):
+def locate_arrow_row(image, *, debug_dir=None, search_height=None):
     """Compare weak and strong cleanup without replacing one row's end symbols."""
     detections = []
     gray = _grayscale(image)
+    original_shape = gray.shape
+    if search_height is not None and gray.shape[0] > search_height:
+        width = max(1, round(gray.shape[1] * search_height / gray.shape[0]))
+        gray = cv2.resize(gray, (width, search_height), interpolation=cv2.INTER_AREA)
     cache = {}
     for size in (3, 5):
         try:
@@ -207,6 +211,19 @@ def locate_arrow_row(image, *, debug_dir=None):
         support = max(detections, key=lambda d: len(d.symbols))
         result = Detection((x, y, right-x, bottom-y), result.slope, result.intercept,
                            max(d.anchors for d in detections), support.symbols)
+    if gray.shape != original_shape:
+        sx = original_shape[1] / gray.shape[1]
+        sy = original_shape[0] / gray.shape[0]
+
+        def original_box(box):
+            x, y, w, h = box
+            left, top = int(np.floor(x*sx)), int(np.floor(y*sy))
+            right, bottom = int(np.ceil((x+w)*sx)), int(np.ceil((y+h)*sy))
+            return left, top, right-left, bottom-top
+
+        result = Detection(original_box(result.roi), result.slope*sy/sx,
+                           result.intercept*sy, result.anchors,
+                           tuple(original_box(box) for box in result.symbols))
     if debug_dir is not None:
         folder = Path(debug_dir)
         folder.mkdir(parents=True, exist_ok=True)
@@ -215,18 +232,31 @@ def locate_arrow_row(image, *, debug_dir=None):
         cv2.rectangle(annotated, (x, y), (x+w, y+h), (255, 255, 0), 2)
         _write_image(folder/"detection.png", annotated)
         (folder/"detection.json").write_text(json.dumps({"roi": result.roi,
-            "symbols": result.symbols, "anchors": result.anchors}, indent=2), encoding="utf-8")
+            "symbols": result.symbols, "anchors": result.anchors,
+            "search_shape": gray.shape}, indent=2), encoding="utf-8")
     return result
 
 
 def recognize_screenshot(image, *, config=None, template_dir=DEFAULT_TEMPLATES, debug_dir=None):
     """Return (direction sequence, detected ROI), without reading annotations."""
-    detection = locate_arrow_row(image, debug_dir=debug_dir)
-    try:
-        sequence = recognize_directions(image, roi=detection.roi, config=config, template_dir=template_dir,
-                                        debug_dir=Path(debug_dir)/"recognition" if debug_dir else None)
-        if len(sequence) < len(detection.symbols):
-            raise RecognitionError("Fewer recognized symbols than row candidates; refusing a partial sequence.")
-    except RecognitionError as error:
-        raise ScreenshotRecognitionError(str(error), detection.roi) from error
-    return sequence, detection.roi
+    # Only localization is reduced; classification always uses original pixels.
+    # If the smaller search loses detail, retry the existing full-size pipeline.
+    _grayscale(image)  # Validate before accessing shape or scheduling a search.
+    searches = (720, None) if image.shape[0] > 720 else (None,)
+    for height in searches:
+        folder = Path(debug_dir)/("coarse" if height else "full") if debug_dir else None
+        detection = None
+        try:
+            detection = locate_arrow_row(image, debug_dir=folder, search_height=height)
+            sequence = recognize_directions(
+                image, roi=detection.roi, config=config, template_dir=template_dir,
+                debug_dir=folder/"recognition" if folder else None)
+            if len(sequence) < len(detection.symbols):
+                raise RecognitionError("Fewer recognized symbols than row candidates; refusing a partial sequence.")
+        except RecognitionError as error:
+            if height is not None:
+                continue
+            if detection is not None:
+                raise ScreenshotRecognitionError(str(error), detection.roi) from error
+            raise
+        return sequence, detection.roi
