@@ -48,18 +48,14 @@ class BindingPanel(QWidget):
         ):
             button.clicked.connect(callback)
             buttons.addWidget(button)
-        self.enable_checkbox = QCheckBox("啟用")
-        self.enable_checkbox.setToolTip("按 Scroll Lock 切換啟用／停用。")
+        self.enable_checkbox = QCheckBox("啟用 (scrlk 啟用/停用)")
+        self.enable_checkbox.setToolTip(
+            "按 Scroll Lock 同時啟用／停用快捷鍵、HUD 與預估倒數。\n"
+            "倒數依熱鍵觸發時間估算，不確認遊戲是否成功呼叫。"
+        )
         self.enable_checkbox.toggled.connect(self.toggle_bindings)
         self.toggle_requested.connect(self.enable_checkbox.toggle, Qt.ConnectionType.QueuedConnection)
         buttons.addWidget(self.enable_checkbox)
-        self.hud_overlay_checkbox = QCheckBox("HUD overlay")
-        self.hud_overlay_checkbox.toggled.connect(self.toggle_hud_overlay)
-        buttons.addWidget(self.hud_overlay_checkbox)
-        self.cooldown_checkbox = QCheckBox("預估cd")
-        self.cooldown_checkbox.setToolTip("依熱鍵觸發時間預估冷卻，不確認遊戲是否成功呼叫。")
-        self.cooldown_checkbox.toggled.connect(self.update_cooldown_enabled)
-        buttons.addWidget(self.cooldown_checkbox)
         buttons.addStretch()
         layout.addLayout(buttons)
 
@@ -68,7 +64,6 @@ class BindingPanel(QWidget):
         self.chat_table = BindingTable("chat", bindings)
         for table in (self.stratagem_table, self.chat_table):
             self.pages.addWidget(table)
-        self.stratagem_table.changed.connect(self.refresh_hud_overlay)
 
         self.settings_page = SettingsPage(bindings, cooldown_modifiers)
         self.settings_page.cooldown_upgrades_changed.connect(self.manager.set_cooldown_upgrades)
@@ -78,37 +73,18 @@ class BindingPanel(QWidget):
         layout.addWidget(self.pages)
         self.navigation.idClicked.connect(self.select_page)
 
-        layout.addWidget(QLabel("勾選「啟用」綁定快捷鍵，取消勾選解除綁定；Settings 的「儲存」寫入設定檔。"))
+        layout.addWidget(QLabel("「啟用」統一控制快捷鍵、HUD 與預估倒數；停用時清除倒數。Settings 的「儲存」寫入設定檔。"))
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         if load_error:
             self.status.setText(f"設定讀取失敗，暫用預設值：{load_error}")
 
-    def toggle_hud_overlay(self, enabled):
-        logger.info("HUD 顯示狀態 enabled=%s", enabled)
-        self.update_cooldown_enabled()
-        if enabled:
-            self.hud_overlay.update_bindings(self.stratagem_table.draft())
-            self.hud_overlay.show()
-        else:
-            self.hud_overlay.hide()
-
-    def update_cooldown_enabled(self, *args):
-        self.hud_overlay.set_cooldown_enabled(
-            self.hud_overlay_checkbox.isChecked() and self.cooldown_checkbox.isChecked(),
-            clear=not self.cooldown_checkbox.isChecked(),
-        )
-
     def select_page(self, index):
         self.pages.setCurrentIndex(index)
         editable = not self.enable_checkbox.isChecked() and index < 2
         self.add_button.setEnabled(editable)
         self.delete_button.setEnabled(editable)
-
-    def refresh_hud_overlay(self):
-        if self.hud_overlay_checkbox.isChecked():
-            self.hud_overlay.update_bindings(self.stratagem_table.draft())
 
     def set_bindings_editable(self, editable):
         self.stratagem_table.setEnabled(editable)
@@ -128,7 +104,6 @@ class BindingPanel(QWidget):
         table.append_binding(Binding("", table.action, value))
         table.selectRow(table.rowCount() - 1)
         table.scrollToBottom()
-        self.refresh_hud_overlay()
 
     def delete_rows(self):
         table = self.pages.currentWidget()
@@ -140,18 +115,21 @@ class BindingPanel(QWidget):
             return
         for index in sorted(rows, key=lambda item: item.row(), reverse=True):
             table.removeRow(index.row())
-        self.refresh_hud_overlay()
 
     def toggle_bindings(self, enabled):
         if not enabled:
             self.manager.disable()
             self.set_bindings_editable(True)
-            self.status.setText("已解除快捷鍵綁定。")
+            self.status.setText("已停用快捷鍵與 HUD，並清除倒數。")
             return
         try:
             desired = effective_bindings(self.draft())
             self.manager.replace(desired)
+            self.hud_overlay.update_bindings(desired)
+            self.hud_overlay.set_cooldown_enabled(True)
             self.manager.enable()
+            self.hud_overlay.set_bindings_enabled(True)
+            self.hud_overlay.show()
         except Exception as error:
             logger.exception("啟用綁定失敗")
             self.manager.disable()
@@ -160,7 +138,7 @@ class BindingPanel(QWidget):
             QMessageBox.warning(self, "啟用失敗", str(error))
             return
         self.set_bindings_editable(False)
-        self.status.setText(f"已啟用 {len(desired)} 筆綁定；取消勾選後可修改。設定檔未更新。")
+        self.status.setText(f"已啟用 {len(desired)} 筆綁定、HUD 與預估倒數；停用後可修改。設定檔未更新。")
 
     def save(self):
         try:
