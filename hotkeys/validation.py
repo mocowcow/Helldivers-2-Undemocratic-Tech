@@ -1,10 +1,11 @@
-from hotkeys.keys import resolve_key
+from hotkeys.keys import TOGGLE_BINDINGS_KEY, resolve_key
 
 from stratagems import STRATAGEMS
 
 
 def validate_bindings(bindings):
     keys = set()
+    reserved = set(resolve_key(TOGGLE_BINDINGS_KEY))
     open_chat_count = 0
     recognize_terminal_count = 0
     for binding in bindings:
@@ -30,6 +31,8 @@ def validate_bindings(bindings):
             raise ValueError(f"不支援的單一按鍵：{binding.key}") from error
         if not scan_codes:
             raise ValueError(f"不支援的快捷鍵：{binding.key}")
+        if reserved.intersection(scan_codes):
+            raise ValueError("Scroll Lock 保留用於切換啟用狀態，不能設定為其他快捷鍵。")
         if keys.intersection(scan_codes):
             raise ValueError(f"快捷鍵重複：{binding.key.upper()}")
         keys.update(scan_codes)

@@ -1,5 +1,6 @@
 import logging
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class BindingPanel(QWidget):
+    toggle_requested = Signal()
+
     def __init__(self, manager, bindings, load_error="", cooldown_modifiers=None):
         super().__init__()
         self.manager = manager
@@ -46,7 +49,9 @@ class BindingPanel(QWidget):
             button.clicked.connect(callback)
             buttons.addWidget(button)
         self.enable_checkbox = QCheckBox("啟用")
+        self.enable_checkbox.setToolTip("按 Scroll Lock 切換啟用／停用。")
         self.enable_checkbox.toggled.connect(self.toggle_bindings)
+        self.toggle_requested.connect(self.enable_checkbox.toggle, Qt.ConnectionType.QueuedConnection)
         buttons.addWidget(self.enable_checkbox)
         self.hud_overlay_checkbox = QCheckBox("HUD overlay")
         self.hud_overlay_checkbox.toggled.connect(self.toggle_hud_overlay)

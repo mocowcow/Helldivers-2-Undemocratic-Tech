@@ -8,7 +8,8 @@ from PySide6.QtWidgets import QApplication
 from config.defaults import DEFAULT_BINDINGS, INPUT_PAUSE
 from config.settings import load_settings
 from game.actions import send_chat
-from hotkeys.manager import BindingManager
+from hotkeys.manager import BindingManager, bind_key
+from hotkeys.keys import TOGGLE_BINDINGS_KEY
 from hotkeys.validation import effective_bindings
 from resources import resource_path
 from ui.binding_panel import BindingPanel
@@ -47,6 +48,7 @@ def main():
     app.aboutToQuit.connect(chat_input.shutdown)
     load_error = ""
     cooldown_modifiers = None
+    unbind_toggle = None
     try:
         saved_bindings, cooldown_modifiers = load_settings()
     except (OSError, ValueError) as error:
@@ -59,6 +61,10 @@ def main():
         bindings.replace(effective_bindings(saved_bindings))
         pdi.PAUSE = INPUT_PAUSE
         panel = BindingPanel(bindings, saved_bindings, load_error, cooldown_modifiers)
+        # Independent of ordinary bindings and chat suspension. Qt handles the
+        # checkbox change on the GUI thread, using its existing enable workflow.
+        unbind_toggle = bind_key(TOGGLE_BINDINGS_KEY, panel.toggle_requested.emit)
+        app.aboutToQuit.connect(unbind_toggle)
 
         def resume_after_chat():
             try:
@@ -76,6 +82,8 @@ def main():
         panel.show()
         return app.exec()
     finally:
+        if unbind_toggle is not None:
+            unbind_toggle()
         chat_input.shutdown()
         if _terminal_recognition is not None:
             _terminal_recognition.close()

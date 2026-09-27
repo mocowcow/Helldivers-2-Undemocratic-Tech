@@ -3,6 +3,9 @@
 import keyboard
 
 
+TOGGLE_BINDINGS_KEY = "scroll lock"
+
+
 # Standard Windows keyboard scan codes. Names describe physical keys,
 # so numpad identities remain stable when Num Lock changes.
 NUMPAD_CODES = {
