@@ -124,6 +124,20 @@ def _locate_arrow_row(gray, *, cleanup_size=3, debug_dir=None, cache=None):
     if any(len(group) >= max(3, len(indices)-1) and not set(group).intersection(indices)
            for _, _, group in rows):
         raise RecognitionError("Multiple plausible arrow rows; refusing ambiguous ROI.")
+    # Strong cleanup can turn a hand into a weak arrow-like anchor. Trim only
+    # an isolated wide end outlier there; the weak-cleanup ROI still protects
+    # a real end symbol seen by both cleanup strengths.
+    indices = sorted(indices, key=lambda i: centers[i, 0])
+    for reverse in (False, True):
+        ordered = indices[::-1] if reverse else indices[:]
+        if cleanup_size != 5 or len(ordered) < 5:
+            continue
+        edge, neighbor = ordered[:2]
+        gaps = np.abs(np.diff(centers[ordered[1:5], 0]))
+        if (anchors[edge]["score"] < 0.85
+                and boxes[edge, 2] > 1.5 * boxes[neighbor, 2]
+                and abs(centers[edge, 0]-centers[neighbor, 0]) > 1.6 * np.median(gaps)):
+            indices.remove(edge)
     points = centers[indices]
     slope, intercept = np.polyfit(points[:, 0], points[:, 1], 1)
     mw, mh = np.median(boxes[indices, 2:], axis=0)
@@ -146,8 +160,11 @@ def _locate_arrow_row(gray, *, cleanup_size=3, debug_dir=None, cache=None):
             # Adaptive thresholding can turn faint panel texture into a weak
             # extra symbol. Keep genuine shape anchors regardless of brightness.
             residual = abs(y+h/2-slope*(x+w/2)-intercept)/np.hypot(slope, 1)
-            if (c not in chosen and mw*0.4 < w < mw*2 and mh*0.4 < h < mh*2
-                    and residual < mh*0.5 and left-2*mw < x+w/2 < right+2*mw):
+            nearest = min(chosen, key=lambda item: abs(
+                item["box"][0]+item["box"][2]/2-(x+w/2)))
+            local_w, local_h = nearest["box"][2:]
+            if (c not in chosen and local_w*0.4 < w < local_w*2 and local_h*0.4 < h < local_h*2
+                    and residual < mh*0.2 and left-2*local_w < x+w/2 < right+2*local_w):
                 if not c["anchor"] and contrast(c["box"]) < row_contrast * 0.25:
                     continue
                 additions.append(c)

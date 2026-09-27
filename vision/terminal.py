@@ -17,6 +17,7 @@ from .matching import TemplateMatcher
 DIRECTIONS = ("up", "down", "left", "right")
 DEFAULT_TEMPLATES = Path(__file__).resolve().parent / "templates" / "terminal"
 SLANTED_TEMPLATES = Path(__file__).resolve().parent / "templates" / "terminal_slanted"
+LOW_ANGLE_TEMPLATES = Path(__file__).resolve().parent / "templates" / "terminal_low_angle"
 _recognition_cache = ContextVar("terminal_recognition_cache", default=None)
 
 
@@ -375,6 +376,76 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
             attempts.append({"method": method, "cleanup_size": cleanup_size,
                              "debug_subdir": label, "error": None})
             break
+    if sequence is None and config.clean_thin_noise and config.cleanup_size == 3:
+        # Thin reticle lines can split a vertical arrow into separate contours.
+        # Close only a two-pixel vertical gap; normal confidence checks remain.
+        repaired = []
+        for method in methods:
+            label = f"repair_{method}"
+            attempt = {"method": label, "debug_subdir": label, "error": None}
+            attempts.append(attempt)
+            try:
+                candidate = _recognize_single(
+                    image, roi=roi, template_dir=template_dir,
+                    config=replace(config, segmentation=method, antialias=True, alignment_radius=2),
+                    debug_dir=Path(debug_dir)/label if debug_dir else None, repair_gaps=True)
+                repaired.append(candidate)
+                attempt["sequence"] = candidate
+            except RecognitionError as error:
+                attempt["error"] = str(error)
+        if repaired and all(candidate == repaired[0] for candidate in repaired):
+            sequence = repaired[0]
+            selected_attempt = next(a for a in attempts if a["method"].startswith("repair_")
+                                    and a.get("sequence") == sequence)
+        elif repaired:
+            attempts[-1]["ambiguous"] = True
+            attempts[-1]["error"] = "Gap-repaired segmentations disagree."
+    if (sequence is None and config.template_fallback and config.clean_thin_noise
+            and config.cleanup_size == 3
+            and Path(template_dir).resolve() == DEFAULT_TEMPLATES.resolve()
+            and not any(a.get("ambiguous") for a in attempts)):
+        # A thick circular reticle survives the normal opening. Try one bounded
+        # cleanup before expensive view searches, requiring both segmentations.
+        cleaned = []
+        for method in methods:
+            label = f"reticle_{method}"
+            attempt = {"method": label, "debug_subdir": label, "error": None}
+            attempts.append(attempt)
+            try:
+                candidate = _recognize_single(
+                    image, roi=roi, template_dir=template_dir,
+                    config=replace(config, segmentation=method, antialias=True, alignment_radius=2),
+                    debug_dir=Path(debug_dir)/label if debug_dir else None,
+                    stretch=True, supplemental_templates=SLANTED_TEMPLATES,
+                    clean_reticle=True)
+                cleaned.append(candidate)
+                attempt["sequence"] = candidate
+            except RecognitionError as error:
+                attempt["error"] = str(error)
+        if len(cleaned) == 2:
+            if cleaned[0] == cleaned[1]:
+                sequence = cleaned[0]
+                selected_attempt = attempts[-1]
+            else:
+                attempts[-1]["ambiguous"] = True
+                attempts[-1]["error"] = "Reticle-cleaned segmentations disagree."
+    if (sequence is None and config.template_fallback
+            and Path(template_dir).resolve() == DEFAULT_TEMPLATES.resolve()
+            and not any(a.get("ambiguous") for a in attempts)):
+        width, height = (roi[2], roi[3]) if roi is not None else (image.shape[1], image.shape[0])
+        if width > height * 5:
+            label = "low_angle_templates"
+            attempt = {"method": label, "debug_subdir": label, "error": None}
+            attempts.append(attempt)
+            try:
+                sequence = recognize_directions(
+                    image, roi=roi, template_dir=LOW_ANGLE_TEMPLATES,
+                    config=replace(config, template_fallback=False),
+                    debug_dir=Path(debug_dir)/label if debug_dir else None)
+                attempt["sequence"] = sequence
+                selected_attempt = attempt
+            except RecognitionError as error:
+                attempt["error"] = str(error)
     # Independent width/height normalization compensates for foreshortening.
     # Only accept agreement from both weak-cleanup segmentations: strong cleanup
     # can erase a faint end symbol and produce a convincing partial sequence.
@@ -577,7 +648,7 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
 
 
 def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=False,
-                               supplemental_templates=None):
+                      supplemental_templates=None, repair_gaps=False, clean_reticle=False):
     if config.cleanup_size not in (3, 5):
         raise ValueError("cleanup_size must be 3 or 5.")
     if not (0 <= config.score_threshold <= 1 and 0 <= config.score_margin <= 2):
@@ -595,8 +666,12 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
     gray = gray_full[y:y + h, x:x + w]
     corrected, binary = _segment(gray, config.segmentation)
     raw_binary = binary
+    if repair_gaps:
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3, 1), dtype=np.uint8))
     if config.clean_thin_noise:
-        binary = _clean_mask(binary, config.cleanup_size)
+        binary = (cv2.morphologyEx(binary, cv2.MORPH_OPEN,
+                                  cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 5)))
+                  if clean_reticle else _clean_mask(binary, config.cleanup_size))
     debug = Path(debug_dir) if debug_dir is not None else None
     if debug:
         debug.mkdir(parents=True, exist_ok=True)
@@ -672,6 +747,26 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
         centers_x = boxes[:, 0] + boxes[:, 2] / 2
         if np.any(np.diff(centers_x) > config.max_gap_ratio * np.median(boxes[:, 2])):
             error = "Large gap between candidates; a symbol may be missing."
+    if error is None and clean_reticle:
+        # A stronger opening must not silently erase a solid row symbol. Thin
+        # reticle fragments may disappear; substantial disconnected shapes may not.
+        weak = _clean_mask(raw_binary, 3)
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(weak)
+        for label in range(1, count):
+            check_deadline()
+            cx, cy, cw, ch, area = stats[label]
+            if area < config.min_area or min(cw, ch) < config.min_size:
+                continue
+            component = (labels[cy:cy+ch, cx:cx+cw] == label).astype(np.uint8)
+            if np.any(binary[cy:cy+ch, cx:cx+cw][component != 0]):
+                continue
+            padded = cv2.copyMakeBorder(component, 1, 1, 1, 1, cv2.BORDER_CONSTANT)
+            if cv2.distanceTransform(padded, cv2.DIST_L2, 5).max() < 2.5:
+                continue
+            points = cv2.findNonZero(component) + np.array([[[cx, cy]]])
+            if _crosses_row(points, row_line, (x, y)):
+                error = "Reticle cleanup erased a solid row candidate; refusing a partial sequence."
+                break
     sequence = [record["direction"] for record in selected] if error is None else None
     if debug:
         for record in records:
@@ -684,6 +779,8 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
         _write_image(debug / "result.png", annotated)
         (debug / "result.json").write_text(json.dumps({
             "roi": [x, y, w, h], "config": asdict(config), "stretch": stretch,
+            "repair_gaps": repair_gaps,
+            "clean_reticle": clean_reticle,
             "candidates": records, "row_line": row_line,
             "blocking_bounds_in_roi": blockers,
             "sequence": sequence, "error": error,

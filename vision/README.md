@@ -8,6 +8,8 @@
 
 高度超過 720 像素的截圖先縮圖定位 ROI，再以原圖像素辨識方向；若定位或辨識失敗，改以原尺寸重試。debug 輸出分別保存在 `coarse/`、`full/`，各層的最終 ROI 使用原圖座標。備援視角校正最多使用兩個工作執行緒，仍要求成功結果彼此一致。
 
+一般比對失敗時，先嘗試 7×5 橢圓開運算清理較粗的準星線，再進行耗時的視角備援。此步驟要求兩種分割結果一致，保留可信度門檻，並拒絕清理時完全消失的實心列內候選；debug 子目錄為 `reticle_otsu/`、`reticle_tophat/`。
+
 從熱鍵請求開始計算 2 秒時限，包含截圖與排程等待。超時或一般失敗均顯示 popup 並記錄 log，超時結果不再觸發按鍵。原生呼叫會在返回後中止，GUI 忙碌時 popup 可能稍晚顯示；已開始的送鍵時間不計入辨識時限。
 
 失敗時保存當次原始截圖至 `SETTINGS_PATH.parent / "failed"`（`%LOCALAPPDATA%/HD2/failed`），檔名為「失敗原因_時間戳.png」。若沒有取得截圖，則無圖片可保存。
@@ -24,6 +26,7 @@
 | `refinements.py` | 辨識流程使用的有限視角校正 |
 | `templates/terminal/` | 一般箭頭模板 |
 | `templates/terminal_slanted/` | 斜視角箭頭模板 |
+| `templates/terminal_low_angle/` | 低角度透視模板，來源及裁切範圍記錄於 `sources.json` |
 
 模板是執行依賴，必須保留並隨 PyInstaller 打包；`sources.json` 保留模板來源紀錄，不需要原始樣本圖片即可執行。
 

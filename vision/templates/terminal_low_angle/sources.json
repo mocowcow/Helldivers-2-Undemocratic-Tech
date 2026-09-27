@@ -1,0 +1,51 @@
+{
+  "source_image": "辨識超時_超過2秒_20260926_173058_728208.png",
+  "sha256": "c39fef14a5defc0d8ac1dbeebf62caecb09a64f80c113b9c41fd00e306549494",
+  "preprocessing": "Grayscale, 61px elliptical top-hat, 3x3 opening; crop unoccluded arrows. No reticle used as a template.",
+  "regions": {
+    "up": [
+      [
+        685,
+        531,
+        28,
+        22
+      ],
+      [
+        1276,
+        526,
+        53,
+        32
+      ]
+    ],
+    "down": [
+      [
+        830,
+        529,
+        27,
+        23
+      ],
+      [
+        1128,
+        526,
+        45,
+        30
+      ]
+    ],
+    "left": [
+      [
+        995,
+        529,
+        46,
+        25
+      ]
+    ],
+    "right": [
+      [
+        1194,
+        528,
+        57,
+        27
+      ]
+    ]
+  }
+}
