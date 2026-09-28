@@ -17,7 +17,9 @@ DEFAULT_BINDINGS = (
     Binding("f9", "stratagem", "Orbital 380mm HE Barrage"),
     Binding("f10", "stratagem", "B-1 Supply Pack"),
 
-    Binding("page up", "chat", "sorry"),
+    Binding("f12", "chat", "sorry"),
 
     Binding("page down", "open_chat"),
+
+    Binding("n", "recognize_terminal"),
 )
