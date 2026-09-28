@@ -48,13 +48,14 @@ class BindingPanel(QWidget):
         ):
             button.clicked.connect(callback)
             buttons.addWidget(button)
-        self.enable_checkbox = QCheckBox("啟用 (scrlk 啟用/停用)")
+        self.enable_checkbox = QCheckBox("啟用 (Scroll Lock)")
         self.enable_checkbox.setToolTip(
             "按 Scroll Lock 同時啟用／停用快捷鍵、HUD 與預估倒數。\n"
             "倒數依熱鍵觸發時間估算，不確認遊戲是否成功呼叫。"
         )
         self.enable_checkbox.toggled.connect(self.toggle_bindings)
-        self.toggle_requested.connect(self.enable_checkbox.toggle, Qt.ConnectionType.QueuedConnection)
+        self.toggle_requested.connect(
+            self.enable_checkbox.toggle, Qt.ConnectionType.QueuedConnection)
         buttons.addWidget(self.enable_checkbox)
         buttons.addStretch()
         layout.addLayout(buttons)
@@ -66,14 +67,16 @@ class BindingPanel(QWidget):
             self.pages.addWidget(table)
 
         self.settings_page = SettingsPage(bindings, cooldown_modifiers)
-        self.settings_page.cooldown_upgrades_changed.connect(self.manager.set_cooldown_upgrades)
+        self.settings_page.cooldown_upgrades_changed.connect(
+            self.manager.set_cooldown_upgrades)
         self.settings_page.emit_cooldown_upgrades()
         self.settings_page.save_requested.connect(self.save)
         self.pages.addWidget(self.settings_page)
         layout.addWidget(self.pages)
         self.navigation.idClicked.connect(self.select_page)
 
-        layout.addWidget(QLabel("「啟用」統一控制快捷鍵、HUD 與預估倒數；停用時清除倒數。Settings 的「儲存」寫入設定檔。"))
+        layout.addWidget(
+            QLabel("「啟用」統一控制快捷鍵、HUD 與預估倒數；停用時清除倒數。Settings 的「儲存」寫入設定檔。"))
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -128,7 +131,6 @@ class BindingPanel(QWidget):
             self.hud_overlay.update_bindings(desired)
             self.hud_overlay.set_cooldown_enabled(True)
             self.manager.enable()
-            self.hud_overlay.set_bindings_enabled(True)
             self.hud_overlay.show()
         except Exception as error:
             logger.exception("啟用綁定失敗")
@@ -142,7 +144,8 @@ class BindingPanel(QWidget):
 
     def save(self):
         try:
-            save_settings(self.draft(), self.settings_page.cooldown_modifiers())
+            save_settings(
+                self.draft(), self.settings_page.cooldown_modifiers())
         except Exception as error:
             logger.exception("儲存設定失敗")
             self.status.setText(f"儲存失敗：{error}")
