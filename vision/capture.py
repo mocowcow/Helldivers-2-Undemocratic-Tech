@@ -16,6 +16,8 @@ from PySide6.QtWidgets import QMessageBox
 
 from game.actions import DIRECTION_KEYS
 from config.settings import SETTINGS_PATH
+from messages import UserFacingError
+from localization import error_text, tr
 
 from .detection import recognize_screenshot
 from .deadline import check_deadline, recognition_deadline
@@ -46,7 +48,7 @@ class TerminalRecognition(QObject):
     """
 
     capture_requested = Signal(object)
-    failed = Signal(object, str)
+    failed = Signal(object, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -76,7 +78,7 @@ class TerminalRecognition(QObject):
             self.capture_requested.emit(job)
         except Exception as error:
             logger.exception("Terminal 辨識請求失敗")
-            self._fail(job, f"辨識請求失敗：{type(error).__name__}: {error}")
+            self._fail(job, UserFacingError('errors.recognition_request', error_type=type(error).__name__, error=error))
             self._finish(job)
             self._busy.release()
             raise
@@ -96,10 +98,10 @@ class TerminalRecognition(QObject):
                 self._popup.hide()
             screen = QGuiApplication.primaryScreen()
             if screen is None:
-                raise RuntimeError("沒有可擷取的主螢幕")
+                raise UserFacingError('errors.no_screen')
             pixmap = screen.grabWindow(0)
             if pixmap.isNull():
-                raise RuntimeError("螢幕截圖失敗")
+                raise UserFacingError('errors.capture_failed')
             image = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
             pixels = np.frombuffer(image.bits(), dtype=np.uint8).reshape(
                 image.height(), image.bytesPerLine())
@@ -119,7 +121,7 @@ class TerminalRecognition(QObject):
             self._busy.release()
         except Exception as error:
             logger.exception("Terminal 截圖或啟動辨識失敗")
-            self._fail(job, f"截圖或啟動辨識失敗：{type(error).__name__}: {error}")
+            self._fail(job, UserFacingError('errors.recognition_start', error_type=type(error).__name__, error=error))
             self._finish(job)
             self._busy.release()
 
@@ -150,10 +152,10 @@ class TerminalRecognition(QObject):
         except RecognitionError as error:
             if not self._closed.is_set():
                 logger.warning("Terminal 無法可靠辨識：%s", error)
-                self._fail(job, f"無法可靠辨識：{error}")
+                self._fail(job, UserFacingError('errors.unreliable', error=error))
         except Exception as error:
             logger.exception("Terminal 辨識或方向按鍵輸入發生錯誤")
-            self._fail(job, f"辨識或方向按鍵輸入失敗：{type(error).__name__}: {error}")
+            self._fail(job, UserFacingError('errors.recognition_input', error_type=type(error).__name__, error=error))
         finally:
             self._finish(job)
             self._busy.release()
@@ -166,7 +168,7 @@ class TerminalRecognition(QObject):
             job.failure_reason = f"辨識超時_超過{RECOGNITION_TIMEOUT:g}秒"
             job.failure_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         logger.warning("Terminal 超時：超過 %g 秒，取消後續按鍵輸入", RECOGNITION_TIMEOUT)
-        self.failed.emit(job, f"截圖與辨識超過 {RECOGNITION_TIMEOUT:g} 秒，已取消後續按鍵輸入。")
+        self.failed.emit(job, UserFacingError('errors.timeout', seconds=format(RECOGNITION_TIMEOUT, 'g')))
         self._save_failure(job)
 
     def _fail(self, job, message):
@@ -174,7 +176,7 @@ class TerminalRecognition(QObject):
             if self._closed.is_set() or job.state not in ("pending", "sending"):
                 return
             job.state = "failed"
-            job.failure_reason = message
+            job.failure_reason = str(message)
             job.failure_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             if job.timer is not None:
                 job.timer.cancel()
@@ -218,7 +220,7 @@ class TerminalRecognition(QObject):
             if job.timer is not None:
                 job.timer.cancel()
 
-    @Slot(object, str)
+    @Slot(object, object)
     def _show_failure(self, job, message):
         if self._closed.is_set() or job is not self._request:
             return
@@ -229,7 +231,8 @@ class TerminalRecognition(QObject):
             self._popup.setStandardButtons(QMessageBox.StandardButton.Ok)
             self._popup.setModal(False)
             self._popup.setTextFormat(Qt.TextFormat.PlainText)
-        self._popup.setWindowTitle("Terminal 辨識失敗")
+        self._popup.setWindowTitle(tr('terminal.failed_title'))
+        message = error_text(message)
         summary = message.split(";", 1)[0][:300]
         self._popup.setText(summary)
         self._popup.setDetailedText(message if summary != message else "")

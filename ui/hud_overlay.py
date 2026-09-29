@@ -1,3 +1,4 @@
+from localization import tr
 import math
 import time
 
@@ -8,6 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget, QToolBu
 
 from resources import resource_path
 from stratagems import STRATAGEMS
+from ui.labels import stratagem_label
 
 
 HUD_SCALE = 0.75
@@ -26,7 +28,7 @@ class HUDOverlay(QWidget):
         self.countdown_timer.setInterval(100)
         self.countdown_timer.timeout.connect(self.refresh_countdowns)
         self.cooldown_requested.connect(self.start_cooldown, Qt.ConnectionType.QueuedConnection)
-        self.setWindowTitle("Stratagem HUD")
+        self.setWindowTitle(tr('hud.title'))
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
@@ -65,8 +67,8 @@ class HUDOverlay(QWidget):
         self.drag_offset = None
         filename = "lock_on.svg" if locked else "lock_off.svg"
         self.lock_button.setIcon(QIcon(str(resource_path("ui") / filename)))
-        self.lock_button.setToolTip("已鎖定，點擊解鎖" if locked else "已解鎖，點擊鎖定")
-        self.lock_button.setAccessibleName("解鎖 HUD" if locked else "鎖定 HUD")
+        self.lock_button.setToolTip(tr('hud.locked_hint') if locked else tr('hud.unlocked_hint'))
+        self.lock_button.setAccessibleName(tr('hud.unlock') if locked else tr('hud.lock'))
         self.setCursor(Qt.CursorShape.ArrowCursor if locked else Qt.CursorShape.OpenHandCursor)
 
     def update_bindings(self, bindings):
@@ -98,7 +100,7 @@ class HUDOverlay(QWidget):
                         svg.hide()
                         svg.deleteLater()
             if visual is None:
-                visual = QLabel(stratagem.name, item)
+                visual = QLabel(stratagem_label(binding.value), item)
                 visual.setWordWrap(True)
                 visual.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 visual.setStyleSheet(f"font-size: {round(9 * HUD_SCALE)}px;")
@@ -117,7 +119,7 @@ class HUDOverlay(QWidget):
             column.addWidget(visual, 0, Qt.AlignmentFlag.AlignHCenter)
             self.row.addWidget(item)
         if self.row.count() == 1:
-            placeholder = QLabel("尚未綁定 Stratagem", self)
+            placeholder = QLabel(tr('hud.empty'), self)
             placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             self.row.addWidget(placeholder)
         self.row.activate()

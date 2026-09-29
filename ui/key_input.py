@@ -1,3 +1,4 @@
+from localization import tr
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QLineEdit
@@ -28,17 +29,17 @@ class KeyInput(QLineEdit):
         self.candidate = ""
         self.setReadOnly(True)
         self.setMinimumWidth(150)
-        self.setToolTip("點擊後按下單一按鍵；放開確定，Esc 清除綁定。")
+        self.setToolTip(tr('key_input.hint'))
         self.show_key()
 
     def show_key(self):
-        self.setText(self.key.upper() if self.key else "未綁定")
+        self.setText(self.key.upper() if self.key else tr('key_input.unbound'))
 
     def begin_capture(self):
         self.capturing = True
         self.pressed.clear()
         self.candidate = ""
-        self.setText("請按下快捷鍵")
+        self.setText(tr('key_input.capture'))
 
     def cancel_capture(self):
         self.capturing = False
@@ -96,7 +97,7 @@ class KeyInput(QLineEdit):
         }.get(event.key(), Qt.KeyboardModifier.NoModifier)
         if len(self.pressed) > 1 or modifiers & ~own_modifier:
             self.candidate = ""
-            self.setText("僅支援單一按鍵")
+            self.setText(tr('key_input.single_only'))
             return
         name = KEY_NAMES.get(event.key())
         if name is None:
@@ -111,7 +112,7 @@ class KeyInput(QLineEdit):
                 raise ValueError("Unsupported key")
         except (ValueError, KeyError):
             self.candidate = ""
-            self.setText("不支援此按鍵，請重試")
+            self.setText(tr('key_input.unsupported'))
             return
         self.candidate = name
         self.setText(name.upper())

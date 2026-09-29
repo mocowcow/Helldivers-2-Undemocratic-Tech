@@ -2,7 +2,7 @@ import logging
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QMessageBox,
+    QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QMessageBox,
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -13,6 +13,7 @@ from stratagems import STRATAGEMS
 from ui.binding_table import BindingTable
 from ui.settings_page import SettingsPage
 from ui.hud_overlay import HUDOverlay
+from localization import error_text, tr
 
 
 logger = logging.getLogger(__name__)
@@ -21,17 +22,17 @@ logger = logging.getLogger(__name__)
 class BindingPanel(QWidget):
     toggle_requested = Signal()
 
-    def __init__(self, manager, bindings, load_error="", cooldown_modifiers=None):
+    def __init__(self, manager, bindings, cooldown_modifiers=None):
         super().__init__()
         self.manager = manager
         self.hud_overlay = HUDOverlay()
         bindings = tuple(bindings)
-        self.setWindowTitle("HD2 Undemocratic Tech")
+        self.setWindowTitle(tr('bindings.title'))
         self.resize(720, 440)
         layout = QVBoxLayout(self)
         navigation = QHBoxLayout()
         self.navigation = QButtonGroup(self)
-        for index, title in enumerate(("Stratagem binding", "Chat binding", "Settings")):
+        for index, title in enumerate((tr('bindings.stratagem_tab'), tr('bindings.chat_tab'), tr('bindings.settings_tab'))):
             button = QPushButton(title)
             button.setCheckable(True)
             self.navigation.addButton(button, index)
@@ -40,18 +41,17 @@ class BindingPanel(QWidget):
         layout.addLayout(navigation)
 
         buttons = QHBoxLayout()
-        self.add_button = QPushButton("增加")
-        self.delete_button = QPushButton("刪除")
+        self.add_button = QPushButton(tr('bindings.add'))
+        self.delete_button = QPushButton(tr('bindings.delete'))
         for button, callback in (
             (self.add_button, self.add_row),
             (self.delete_button, self.delete_rows),
         ):
             button.clicked.connect(callback)
             buttons.addWidget(button)
-        self.enable_checkbox = QCheckBox("啟用 (Scroll Lock)")
+        self.enable_checkbox = QCheckBox(tr('bindings.enable'))
         self.enable_checkbox.setToolTip(
-            "按 Scroll Lock 同時啟用／停用快捷鍵、HUD 與預估倒數。\n"
-            "倒數依熱鍵觸發時間估算，不確認遊戲是否成功呼叫。"
+            tr('bindings.toggle_hint')
         )
         self.enable_checkbox.toggled.connect(self.toggle_bindings)
         self.toggle_requested.connect(
@@ -74,14 +74,6 @@ class BindingPanel(QWidget):
         self.pages.addWidget(self.settings_page)
         layout.addWidget(self.pages)
         self.navigation.idClicked.connect(self.select_page)
-
-        layout.addWidget(
-            QLabel("「啟用」統一控制快捷鍵、HUD 與預估倒數；停用時清除倒數。Settings 的「儲存」寫入設定檔。"))
-        self.status = QLabel()
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        if load_error:
-            self.status.setText(f"設定讀取失敗，暫用預設值：{load_error}")
 
     def select_page(self, index):
         self.pages.setCurrentIndex(index)
@@ -114,7 +106,6 @@ class BindingPanel(QWidget):
             return
         rows = table.selectionModel().selectedRows()
         if not rows:
-            self.status.setText("請先選取要刪除的列。")
             return
         for index in sorted(rows, key=lambda item: item.row(), reverse=True):
             table.removeRow(index.row())
@@ -122,8 +113,9 @@ class BindingPanel(QWidget):
     def toggle_bindings(self, enabled):
         if not enabled:
             self.manager.disable()
+            self.hud_overlay.set_cooldown_enabled(False)
+            self.hud_overlay.hide()
             self.set_bindings_editable(True)
-            self.status.setText("已停用快捷鍵與 HUD，並清除倒數。")
             return
         try:
             desired = effective_bindings(self.draft())
@@ -136,22 +128,19 @@ class BindingPanel(QWidget):
             logger.exception("啟用綁定失敗")
             self.manager.disable()
             self.enable_checkbox.setChecked(False)
-            self.status.setText(f"啟用失敗：{error}")
-            QMessageBox.warning(self, "啟用失敗", str(error))
+            QMessageBox.warning(self, tr('bindings.enable_failed_title'), error_text(error))
             return
         self.set_bindings_editable(False)
-        self.status.setText(f"已啟用 {len(desired)} 筆綁定、HUD 與預估倒數；停用後可修改。設定檔未更新。")
 
     def save(self):
         try:
             save_settings(
-                self.draft(), self.settings_page.cooldown_modifiers())
+                self.draft(), self.settings_page.cooldown_modifiers(),
+                language=self.settings_page.language())
         except Exception as error:
             logger.exception("儲存設定失敗")
-            self.status.setText(f"儲存失敗：{error}")
-            QMessageBox.warning(self, "儲存失敗", str(error))
+            QMessageBox.warning(self, tr('bindings.save_failed_title'), error_text(error))
             return
-        self.status.setText("已儲存所有分頁設定；目前生效的綁定未變更。")
 
     def closeEvent(self, event):
         self.hud_overlay.close()

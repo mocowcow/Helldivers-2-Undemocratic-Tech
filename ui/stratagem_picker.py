@@ -1,3 +1,4 @@
+from localization import tr
 from PySide6.QtCore import Qt, Signal, QSize, QRect
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvgWidgets import QSvgWidget
@@ -8,6 +9,7 @@ from PySide6.QtWidgets import (
 
 from stratagems import STRATAGEMS
 from resources import resource_path
+from ui.labels import category_label, stratagem_label
 
 
 SVG_DIRECTORY = resource_path("stratagems-svg")
@@ -18,8 +20,8 @@ COLUMNS = 10
 class StratagemPicker(QDialog):
     def __init__(self, current_name, parent=None):
         super().__init__(parent)
-        self.selected_name = current_name
-        self.setWindowTitle("選擇 Stratagem")
+        self.selected_id = current_name
+        self.setWindowTitle(tr('picker.title'))
         available = self.screen().availableGeometry()
         self.resize(min(980, available.width()), min(760, available.height()))
         layout = QVBoxLayout(self)
@@ -36,10 +38,10 @@ class StratagemPicker(QDialog):
             ).append((name, stratagem))
 
         for category, subcategories in groups.items():
-            group = QGroupBox(category)
+            group = QGroupBox(category_label(category))
             category_layout = QVBoxLayout(group)
             for subcategory, entries in subcategories.items():
-                category_layout.addWidget(QLabel(subcategory))
+                category_layout.addWidget(QLabel(category_label(subcategory)))
                 grid = QGridLayout()
                 grid.setAlignment(Qt.AlignmentFlag.AlignLeft)
                 grid.setSpacing(6)
@@ -59,8 +61,8 @@ class StratagemPicker(QDialog):
         tile.setCheckable(True)
         tile.setChecked(selected)
         tile.setAutoDefault(False)
-        tile.setToolTip(name)
-        tile.setAccessibleName(name)
+        tile.setToolTip(stratagem_label(name))
+        tile.setAccessibleName(stratagem_label(name))
         tile.setStyleSheet(
             "QPushButton { background: #252525; color: white; "
             "border: 2px solid #666; border-radius: 4px; }"
@@ -79,7 +81,7 @@ class StratagemPicker(QDialog):
                 else:
                     svg.deleteLater()
         if visual is None:
-            visual = QLabel(name, tile)
+            visual = QLabel(stratagem_label(name), tile)
             visual.setWordWrap(True)
             visual.setAlignment(Qt.AlignmentFlag.AlignCenter)
             visual.setStyleSheet("color: white; background: transparent; font-size: 10px;")
@@ -89,7 +91,7 @@ class StratagemPicker(QDialog):
         return tile
 
     def choose(self, name):
-        self.selected_name = name
+        self.selected_id = name
         self.accept()
 
 
@@ -97,17 +99,17 @@ class StratagemButton(QPushButton):
     changed = Signal()
 
     def __init__(self, name):
-        super().__init__(name)
-        self.name = name
+        super().__init__()
+        self.stratagem_id = name
         self.setIconSize(QSize(28, 28))
         self.update_visual()
-        self.setToolTip("點擊選擇 Stratagem")
+        self.setToolTip(tr('picker.button_hint'))
         self.clicked.connect(self.choose)
 
     def update_visual(self):
-        self.setText(self.name)
+        self.setText(stratagem_label(self.stratagem_id))
         icon = QIcon()
-        stratagem = STRATAGEMS.get(self.name)
+        stratagem = STRATAGEMS.get(self.stratagem_id)
         if stratagem is not None and stratagem.svg_name:
             path = SVG_DIRECTORY / stratagem.svg_name
             if path.is_file():
@@ -129,11 +131,11 @@ class StratagemButton(QPushButton):
         self.setIcon(icon)
 
     def choose(self):
-        picker = StratagemPicker(self.name, self.window())
+        picker = StratagemPicker(self.stratagem_id, self.window())
         try:
             if picker.exec() == QDialog.DialogCode.Accepted:
-                if picker.selected_name != self.name:
-                    self.name = picker.selected_name
+                if picker.selected_id != self.stratagem_id:
+                    self.stratagem_id = picker.selected_id
                     self.update_visual()
                     self.changed.emit()
         finally:

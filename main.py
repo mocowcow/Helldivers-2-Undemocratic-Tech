@@ -14,6 +14,7 @@ from hotkeys.validation import effective_bindings
 from resources import resource_path
 from ui.binding_panel import BindingPanel
 from ui.chat_input import ChatInput
+from localization import configure_i18n
 from diagnostics import configure_logging, LOG_PATH
 from vision.capture import TerminalRecognition
 
@@ -38,7 +39,8 @@ def request_terminal_recognition():
 
 def main():
     global _terminal_recognition
-    app = QApplication([])
+    app = QApplication([])  
+    configure_i18n()
     app.setWindowIcon(QIcon(str(resource_path("icon.ico"))))
     app.setQuitOnLastWindowClosed(False)
     chat_input = ChatInput(send_chat)
@@ -46,21 +48,20 @@ def main():
     chat_input.on_open = bindings.suspend
     app.aboutToQuit.connect(bindings.disable)
     app.aboutToQuit.connect(chat_input.shutdown)
-    load_error = ""
     cooldown_modifiers = None
     unbind_toggle = None
     try:
-        saved_bindings, cooldown_modifiers = load_settings()
+        saved_bindings, cooldown_modifiers, language = load_settings()
+        configure_i18n(language)
     except (OSError, ValueError) as error:
         logger.exception("設定載入失敗，使用預設綁定")
         saved_bindings = DEFAULT_BINDINGS
-        load_error = str(error)
 
     try:
         _terminal_recognition = TerminalRecognition(app)
         bindings.replace(effective_bindings(saved_bindings))
         pdi.PAUSE = INPUT_PAUSE
-        panel = BindingPanel(bindings, saved_bindings, load_error, cooldown_modifiers)
+        panel = BindingPanel(bindings, saved_bindings, cooldown_modifiers)
         # Independent of ordinary bindings and chat suspension. Qt handles the
         # checkbox change on the GUI thread, using its existing enable workflow.
         unbind_toggle = bind_key(TOGGLE_BINDINGS_KEY, panel.toggle_requested.emit)
@@ -75,7 +76,6 @@ def main():
                 panel.enable_checkbox.setChecked(False)
                 # Clear the suspension now that no hooks need restoring.
                 bindings.resume()
-                panel.status.setText("恢復快捷鍵失敗，已停用；請重新勾選啟用。")
 
         chat_input.on_finished = resume_after_chat
         bindings.on_stratagem_trigger = panel.hud_overlay.cooldown_requested.emit

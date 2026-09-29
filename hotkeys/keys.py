@@ -1,6 +1,9 @@
 """Resolve stored key names to Windows scan codes and keypad identities."""
 
+
 import keyboard
+
+from messages import UserFacingError
 
 
 TOGGLE_BINDINGS_KEY = "scroll lock"
@@ -33,7 +36,7 @@ def resolve_key(key):
     if name.startswith("num ") and name != "num lock":
         suffix = name[4:]
         if suffix not in NUMPAD_CODES:
-            raise ValueError(f"不支援的數字鍵盤按鍵：{key}")
+            raise UserFacingError('errors.unsupported_numpad', key_name=key)
         return ((NUMPAD_CODES[suffix], True),)
     name = keyboard.normalize_name(name)
     if name == "num lock":

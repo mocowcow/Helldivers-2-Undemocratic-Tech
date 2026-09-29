@@ -1,3 +1,4 @@
+from localization import tr
 from PySide6.QtCore import QEvent, QItemSelectionModel, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QHeaderView, QLineEdit, QTableWidget, QTableWidgetItem,
@@ -17,7 +18,7 @@ class BindingTable(QTableWidget):
         if action == "stratagem":
             self.verticalHeader().setDefaultSectionSize(40)
         self.setHorizontalHeaderLabels([
-            "Stratagem" if action == "stratagem" else "Chat message", "快捷鍵",
+            tr('table.stratagem') if action == "stratagem" else tr('table.chat'), tr('table.key'),
         ])
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -63,7 +64,7 @@ class BindingTable(QTableWidget):
         return tuple(
             Binding(
                 self.cellWidget(row, 1).key, self.action,
-                self.cellWidget(row, 0).name
+                self.cellWidget(row, 0).stratagem_id
                 if self.action == "stratagem" else self.cellWidget(row, 0).text(),
             )
             for row in range(self.rowCount())

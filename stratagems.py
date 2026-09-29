@@ -1,6 +1,8 @@
 
 class Stratagem:
     def __init__(self, name, sequence, category, subcategory, svg_name="", cooldown=0):
+        # Legacy English names/categories are stable identifiers used by saved
+        # bindings and cooldown rules. Translate only through ui.labels.
         self.name = name
         self.sequence = sequence
         self.category = category
