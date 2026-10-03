@@ -260,11 +260,34 @@ def recognize_screenshot(image, *, config=None, template_dir=DEFAULT_TEMPLATES, 
     # If the smaller search loses detail, retry the existing full-size pipeline.
     _grayscale(image)  # Validate before accessing shape or scheduling a search.
     searches = (720, None) if image.shape[0] > 720 else (None,)
+    previous = None
     for height in searches:
         folder = Path(debug_dir)/("coarse" if height else "full") if debug_dir else None
         detection = None
         try:
             detection = locate_arrow_row(image, debug_dir=folder, search_height=height)
+            if previous is not None:
+                # A full-resolution retry must not forget end symbols already
+                # found at the smaller search scale (e.g. under a reticle).
+                middle = previous.roi[0] + previous.roi[2] / 2
+                row_height = np.median([box[3] for box in previous.symbols])
+                if (abs(detection.slope - previous.slope) > 0.15
+                        or abs((detection.slope - previous.slope) * middle
+                               + detection.intercept - previous.intercept) > row_height):
+                    raise RecognitionError("Search scales located different rows; refusing ambiguous ROI.")
+                support = max((previous, detection), key=lambda d: len(d.symbols))
+                roi = detection.roi
+                # Ignore subpixel rounding/padding changes: expanding those can
+                # include unrelated panel edges in a tightly cropped shallow row.
+                if (previous.roi[0] < roi[0] - row_height / 2
+                        or previous.roi[0] + previous.roi[2] > roi[0] + roi[2] + row_height / 2):
+                    x = min(previous.roi[0], roi[0])
+                    y = min(previous.roi[1], roi[1])
+                    right = max(d.roi[0] + d.roi[2] for d in (previous, detection))
+                    bottom = max(d.roi[1] + d.roi[3] for d in (previous, detection))
+                    roi = (x, y, right-x, bottom-y)
+                detection = Detection(roi, detection.slope,
+                                      detection.intercept, detection.anchors, support.symbols)
             sequence = recognize_directions(
                 image, roi=detection.roi, config=config, template_dir=template_dir,
                 debug_dir=folder/"recognition" if folder else None)
@@ -272,6 +295,7 @@ def recognize_screenshot(image, *, config=None, template_dir=DEFAULT_TEMPLATES, 
                 raise RecognitionError("Fewer recognized symbols than row candidates; refusing a partial sequence.")
         except RecognitionError as error:
             if height is not None:
+                previous = detection
                 continue
             if detection is not None:
                 raise ScreenshotRecognitionError(str(error), detection.roi) from error

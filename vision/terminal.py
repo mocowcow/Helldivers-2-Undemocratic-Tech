@@ -45,6 +45,7 @@ class RecognitionConfig:
     antialias: bool = False
     antialias_fallback: bool = True
     template_fallback: bool = True
+    circular_reticle_fallback: bool = True
 
 
 class RecognitionError(ValueError):
@@ -404,6 +405,44 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
             and config.cleanup_size == 3
             and Path(template_dir).resolve() == DEFAULT_TEMPLATES.resolve()
             and not any(a.get("ambiguous") for a in attempts)):
+        # Small blurred symbols benefit from antialiased normalization. A long
+        # perspective row instead needs its aspect ratios preserved; segmenting
+        # the full image avoids a cropped hand/panel changing the threshold.
+        width, height = roi[2:] if roi is not None else (image.shape[1], image.shape[0])
+        # Shallow rows already have dedicated low-angle templates below.
+        variants = [("combined_stretch", True, False)] if width <= 5 * height else []
+        if roi is not None:
+            variants.append(("context_reticle", False, True))
+        for prefix, stretch, full_context in variants:
+            agreed = []
+            for method in methods:
+                label = f"{prefix}_{method}"
+                attempt = {"method": label, "debug_subdir": label, "error": None}
+                attempts.append(attempt)
+                try:
+                    candidate = _recognize_single(
+                        image, roi=roi, template_dir=template_dir,
+                        config=replace(config, segmentation=method, antialias=True, alignment_radius=2),
+                        debug_dir=Path(debug_dir)/label if debug_dir else None,
+                        stretch=stretch, supplemental_templates=SLANTED_TEMPLATES,
+                        clean_reticle=full_context, full_context=full_context)
+                    agreed.append(candidate)
+                    attempt["sequence"] = candidate
+                except RecognitionError as error:
+                    attempt["error"] = str(error)
+                    break
+            if len(agreed) == 2:
+                if agreed[0] == agreed[1]:
+                    sequence = agreed[0]
+                    selected_attempt = attempts[-1]
+                else:
+                    attempts[-1]["ambiguous"] = True
+                    attempts[-1]["error"] = "Combined segmentation sequences disagree."
+                break
+    if (sequence is None and config.template_fallback and config.clean_thin_noise
+            and config.cleanup_size == 3
+            and Path(template_dir).resolve() == DEFAULT_TEMPLATES.resolve()
+            and not any(a.get("ambiguous") for a in attempts)):
         # A thick circular reticle survives the normal opening. Try one bounded
         # cleanup before expensive view searches, requiring both segmentations.
         cleaned = []
@@ -473,6 +512,25 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
             else:
                 attempts[-1]["error"] = "Stretched segmentation sequences disagree."
                 attempts[-1]["ambiguous"] = True
+    if (sequence is None and config.circular_reticle_fallback and roi is not None
+            and config.clean_thin_noise and not any(a.get("ambiguous") for a in attempts)):
+        from .reticle import remove_circular_reticle
+
+        label = "circular_reticle"
+        folder = Path(debug_dir) / label if debug_dir is not None else None
+        repaired = remove_circular_reticle(_grayscale(image), roi, debug_dir=folder)
+        if repaired is not None:
+            attempt = {"method": label, "debug_subdir": label, "error": None}
+            attempts.append(attempt)
+            try:
+                sequence = recognize_directions(
+                    repaired, roi=roi, template_dir=template_dir,
+                    config=replace(config, circular_reticle_fallback=False),
+                    debug_dir=folder / "recognition" if folder else None)
+                attempt["sequence"] = sequence
+                selected_attempt = attempt
+            except RecognitionError as error:
+                attempt["error"] = str(error)
     if (sequence is None and config.deskew_fallback
             and config.clean_thin_noise and config.cleanup_size == 3):
         corrected_sequences = []
@@ -648,7 +706,8 @@ def _recognize_directions(image, *, roi, template_dir, config, debug_dir):
 
 
 def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=False,
-                      supplemental_templates=None, repair_gaps=False, clean_reticle=False):
+                      supplemental_templates=None, repair_gaps=False, clean_reticle=False,
+                      full_context=False):
     if config.cleanup_size not in (3, 5):
         raise ValueError("cleanup_size must be 3 or 5.")
     if not (0 <= config.score_threshold <= 1 and 0 <= config.score_margin <= 2):
@@ -664,7 +723,12 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
     if min(x, y) < 0 or min(w, h) <= 0 or x + w > width or y + h > height:
         raise ValueError("ROI must be entirely inside the image.")
     gray = gray_full[y:y + h, x:x + w]
-    corrected, binary = _segment(gray, config.segmentation)
+    if full_context:
+        corrected, binary = _segment(gray_full, config.segmentation)
+        corrected = corrected[y:y + h, x:x + w]
+        binary = binary[y:y + h, x:x + w]
+    else:
+        corrected, binary = _segment(gray, config.segmentation)
     raw_binary = binary
     if repair_gaps:
         binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3, 1), dtype=np.uint8))
@@ -781,6 +845,7 @@ def _recognize_single(image, *, roi, template_dir, config, debug_dir, stretch=Fa
             "roi": [x, y, w, h], "config": asdict(config), "stretch": stretch,
             "repair_gaps": repair_gaps,
             "clean_reticle": clean_reticle,
+            "full_context": full_context,
             "candidates": records, "row_line": row_line,
             "blocking_bounds_in_roi": blockers,
             "sequence": sequence, "error": error,

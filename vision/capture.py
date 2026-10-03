@@ -10,7 +10,7 @@ from time import monotonic
 
 import numpy as np
 import pydirectinput as pdi
-from PySide6.QtCore import QObject, Qt, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QImage
 from PySide6.QtWidgets import QMessageBox
 
@@ -56,6 +56,8 @@ class TerminalRecognition(QObject):
         self._closed = Event()
         self._request = None
         self._popup = None
+        self._popup_timer = QTimer(self)
+        self._popup_timer.setSingleShot(True)
         self.capture_requested.connect(self._capture, Qt.ConnectionType.QueuedConnection)
         self.failed.connect(self._show_failure, Qt.ConnectionType.QueuedConnection)
 
@@ -95,6 +97,7 @@ class TerminalRecognition(QObject):
         try:
             check_deadline(job.deadline)
             if self._popup is not None:
+                self._popup_timer.stop()
                 self._popup.hide()
             screen = QGuiApplication.primaryScreen()
             if screen is None:
@@ -231,17 +234,31 @@ class TerminalRecognition(QObject):
             self._popup.setStandardButtons(QMessageBox.StandardButton.Ok)
             self._popup.setModal(False)
             self._popup.setTextFormat(Qt.TextFormat.PlainText)
+            self._popup_timer.timeout.connect(self._popup.close)
+            self._popup.finished.connect(self._popup_timer.stop)
         self._popup.setWindowTitle(tr('terminal.failed_title'))
         message = error_text(message)
         summary = message.split(";", 1)[0][:300]
         self._popup.setText(summary)
         self._popup.setDetailedText(message if summary != message else "")
         self._popup.show()
+        self._popup.adjustSize()
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            # Use the full capture screen, including the taskbar area.
+            geometry = screen.geometry()
+            frame = self._popup.frameGeometry()
+            self._popup.move(
+                geometry.x() + (geometry.width() - frame.width()) // 2,
+                max(geometry.y(), geometry.y() + geometry.height() - frame.height() - 20),
+            )
         self._popup.raise_()
+        self._popup_timer.start(2000)
 
     def close(self):
         """Stop accepting requests; active daemon work does not delay app exit."""
         self._closed.set()
+        self._popup_timer.stop()
         if self._request is not None:
             self._finish(self._request)
         if self._popup is not None:
