@@ -2,6 +2,7 @@ from messages import UserFacingError
 from hotkeys.keys import TOGGLE_BINDINGS_KEY, resolve_key
 
 from stratagems import STRATAGEMS
+from game.actions import RELOAD_ARMOR_MULTIPLIERS
 
 
 def validate_bindings(bindings):
@@ -9,8 +10,9 @@ def validate_bindings(bindings):
     reserved = set(resolve_key(TOGGLE_BINDINGS_KEY))
     open_chat_count = 0
     recognize_terminal_count = 0
+    GR8_fast_reload_count = 0
     for binding in bindings:
-        if binding.action not in ("stratagem", "chat", "open_chat", "recognize_terminal"):
+        if binding.action not in ("stratagem", "chat", "open_chat", "recognize_terminal", "GR8_fast_reload"):
             raise UserFacingError('errors.unknown_action', action=binding.action)
         if binding.action == "stratagem" and binding.value not in STRATAGEMS:
             raise UserFacingError('errors.unknown_stratagem', stratagem=binding.value)
@@ -22,6 +24,12 @@ def validate_bindings(bindings):
             recognize_terminal_count += 1
             if recognize_terminal_count > 1:
                 raise UserFacingError('errors.terminal_key_count')
+        if binding.action == "GR8_fast_reload":
+            if (binding.value or "standard") not in RELOAD_ARMOR_MULTIPLIERS:
+                raise UserFacingError('errors.unknown_reload_armor', armor=binding.value)
+            GR8_fast_reload_count += 1
+            if GR8_fast_reload_count > 1:
+                raise UserFacingError('errors.GR8_fast_reload_key_count')
         if not binding.key:
             continue
         if binding.action == "chat" and not binding.value.strip():

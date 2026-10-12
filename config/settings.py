@@ -46,7 +46,10 @@ def load_settings(path=SETTINGS_PATH):
             or not isinstance(item.get("value"), str)
         ):
             raise UserFacingError('errors.binding_fields')
-        bindings.append(Binding(item["key"], item["action"], item["value"]))
+        value = item["value"]
+        if item["action"] == "GR8_fast_reload" and value == "reload_boost":
+            value = "TR-8"
+        bindings.append(Binding(item["key"], item["action"], value))
     validate_bindings(bindings)
     logger.info("設定載入完成 path=%s count=%s", path, len(bindings))
     return tuple(bindings), modifiers, language

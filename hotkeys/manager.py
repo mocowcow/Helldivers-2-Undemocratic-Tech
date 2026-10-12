@@ -1,10 +1,11 @@
 from functools import partial
 import logging
 import time
+from threading import Event, Lock, Thread
 
 import keyboard
 
-from game.actions import call_stratagem, send_chat
+from game.actions import call_stratagem, GR8_fast_reload, RELOAD_ARMOR_MULTIPLIERS, send_chat
 from game.cooldowns import calculate_cooldown
 from stratagems import STRATAGEMS
 from hotkeys.models import Binding
@@ -89,6 +90,8 @@ class BindingManager:
         self._suspended = False
         self._bindings = {}
         self._removers = {}
+        self._reload_lock = Lock()
+        self._reload_cancel = Event()
 
     @property
     def bindings(self):
@@ -128,6 +131,7 @@ class BindingManager:
 
     def disable(self):
         self._enabled = False
+        self._reload_cancel.set()
         self._remove_hooks()
 
     def _remove_hooks(self):
@@ -141,6 +145,7 @@ class BindingManager:
     def suspend(self):
         """Temporarily remove hooks without changing the user's enabled state."""
         self._suspended = True
+        self._reload_cancel.set()
         self._remove_hooks()
         logger.info("聊天期間暫停快捷鍵")
 
@@ -156,6 +161,9 @@ class BindingManager:
     def _callback(self, binding):
         if binding.action == "stratagem":
             return partial(call_stratagem, STRATAGEMS[binding.value])
+        if binding.action == "GR8_fast_reload":
+            multiplier = RELOAD_ARMOR_MULTIPLIERS[binding.value or "standard"]
+            return partial(self._start_GR8_fast_reload, multiplier)
         if binding.action == "chat":
             return partial(send_chat, binding.value)
         if binding.action == "open_chat":
@@ -165,6 +173,28 @@ class BindingManager:
                 raise ValueError("Terminal 辨識服務未設定。")
             return partial(self.recognize_terminal)
         raise ValueError(f"Unknown binding action: {binding.action}")
+
+    def _start_GR8_fast_reload(self, time_multiplier=1.0):
+        if not self._reload_lock.acquire(blocking=False):
+            return
+        cancel = Event()
+        self._reload_cancel = cancel
+        if not self._enabled or self._suspended:
+            cancel.set()
+
+        def run():
+            try:
+                GR8_fast_reload(time_multiplier=time_multiplier, cancel=cancel)
+            except Exception:
+                logger.exception("GR8 fast reload failed")
+            finally:
+                self._reload_lock.release()
+
+        try:
+            Thread(target=run, name="GR8_fast_reload", daemon=True).start()
+        except Exception:
+            self._reload_lock.release()
+            raise
 
     def bind(self, binding):
         """Register or replace a key; restore the old binding if registration fails."""

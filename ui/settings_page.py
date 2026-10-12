@@ -11,6 +11,7 @@ from config.settings import SETTINGS_PATH
 from hotkeys.models import Binding
 from ui.key_input import KeyInput
 from game.cooldowns import COOLDOWN_UPGRADES
+from game.actions import RELOAD_ARMOR_MULTIPLIERS
 from ui.labels import modifier_label
 from localization import available_languages, current_language, error_text, tr
 
@@ -55,6 +56,21 @@ class SettingsPage(QWidget):
         self.clear_terminal_key.clicked.connect(self.terminal_key.clear_binding)
         terminal_key_row.addWidget(self.clear_terminal_key)
         form.addRow(tr('settings.terminal_key'), terminal_key_row)
+        reload_key = next((b.key for b in bindings if b.action == "GR8_fast_reload"), "j")
+        self.GR8_fast_reload_key = KeyInput(reload_key)
+        reload_key_row = QHBoxLayout()
+        reload_key_row.addWidget(self.GR8_fast_reload_key)
+        self.clear_GR8_fast_reload_key = QPushButton(tr('settings.clear'))
+        self.clear_GR8_fast_reload_key.clicked.connect(self.GR8_fast_reload_key.clear_binding)
+        reload_armor = next((b.value for b in bindings if b.action == "GR8_fast_reload"), "") or "standard"
+        self.reload_armor = QComboBox()
+        for armor in RELOAD_ARMOR_MULTIPLIERS:
+            self.reload_armor.addItem(tr(f'settings.reload_armor_{armor}'), armor)
+        self.reload_armor.setCurrentIndex(self.reload_armor.findData(reload_armor))
+        reload_key_row.addWidget(QLabel(tr('settings.reload_armor')))
+        reload_key_row.addWidget(self.reload_armor)
+        reload_key_row.addWidget(self.clear_GR8_fast_reload_key)
+        form.addRow(tr('settings.GR8_fast_reload_key'), reload_key_row)
         hint = QLabel(
             tr('settings.cooldown_hint')
         )
@@ -95,15 +111,19 @@ class SettingsPage(QWidget):
         self.clear_key.setEnabled(editable)
         self.terminal_key.setEnabled(editable)
         self.clear_terminal_key.setEnabled(editable)
+        self.GR8_fast_reload_key.setEnabled(editable)
+        self.clear_GR8_fast_reload_key.setEnabled(editable)
+        self.reload_armor.setEnabled(editable)
 
     def draft(self):
         return tuple(
-            Binding(key, action)
+            Binding(key, action, self.reload_armor.currentData() if action == "GR8_fast_reload" else "")
             for key, action in (
                 (self.open_chat_key.key, "open_chat"),
                 (self.terminal_key.key, "recognize_terminal"),
+                (self.GR8_fast_reload_key.key, "GR8_fast_reload"),
             )
-            if key
+            if key or action == "GR8_fast_reload"
         )
 
     def open_settings_folder(self):

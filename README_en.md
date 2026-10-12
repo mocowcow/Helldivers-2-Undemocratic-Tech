@@ -10,6 +10,7 @@ A stratagem, chat, and terminal assistant for Helldivers 2.
 2. **Chat assistance**: Bind keys to send preset messages, or open a separate window to type a full message.
 3. **HUD and estimated cooldowns**: Display stratagem icons and cooldown countdowns. Adjust the HUD position and apply ship upgrades and planetary environmental modifiers when calculating cooldowns.
 4. **Terminal arrow recognition**: Bind a key to capture the screen, recognize the arrow sequence, and enter it automatically.
+5. **GR8 fast reload**: Press **T** by default to run the reload and animation-cancel key sequence. Change the hotkey in Settings and choose standard armor (time multiplier 1) or TG-8 Sharpshooter (time multiplier 0.79).
 
 ## Screenshots
 

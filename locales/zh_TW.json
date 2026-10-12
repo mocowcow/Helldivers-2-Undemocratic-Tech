@@ -17,6 +17,8 @@
     "key": "快捷鍵"
   },
   "errors": {
+    "unknown_reload_armor": "未知的裝填裝甲設定：%{armor}",
+    "GR8_fast_reload_key_count": "GR-8 快速裝填只能設定一個快捷鍵。",
     "recognition_request": "辨識請求失敗：%{error_type}: %{error}",
     "no_screen": "沒有可擷取的主螢幕",
     "capture_failed": "螢幕截圖失敗",
@@ -56,6 +58,10 @@
     "unsupported": "不支援此按鍵，請重試"
   },
   "settings": {
+    "reload_armor": "裝甲",
+    "reload_armor_standard": "普通裝甲（100%）",
+    "reload_armor_TR-8": "TR-8 神射手",
+    "GR8_fast_reload_key": "GR-8 快速裝填快捷鍵",
     "open_folder": "開啟儲存路徑",
     "save": "儲存",
     "path": "設定檔儲存位置",

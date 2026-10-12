@@ -17,6 +17,8 @@
     "key": "Hotkey"
   },
   "errors": {
+    "unknown_reload_armor": "Unknown reload armor: %{armor}",
+    "GR8_fast_reload_key_count": "Only one hotkey can be assigned to GR-8 fast reload.",
     "recognition_request": "Recognition request failed: %{error_type}: %{error}",
     "no_screen": "No primary screen is available for capture",
     "capture_failed": "Screen capture failed",
@@ -56,6 +58,10 @@
     "unsupported": "Unsupported key. Try again."
   },
   "settings": {
+    "reload_armor": "Armor",
+    "reload_armor_standard": "Standard armor (100%)",
+    "reload_armor_TR-8": "TG-8 Sharpshooter",
+    "GR8_fast_reload_key": "GR-8 fast reload hotkey",
     "open_folder": "Open folder",
     "save": "Save",
     "path": "Settings file location",

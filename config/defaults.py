@@ -22,4 +22,5 @@ DEFAULT_BINDINGS = (
     Binding("page down", "open_chat"),
 
     Binding("n", "recognize_terminal"),
+    Binding("t", "GR8_fast_reload"),
 )
