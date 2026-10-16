@@ -7,6 +7,7 @@ pyinstaller ^
     --add-data "stratagems-svg;stratagems-svg" ^
     --add-data "ui/lock_on.svg;ui" ^
     --add-data "ui/lock_off.svg;ui" ^
+    --add-data "ui/generic_effect.svg;ui" ^
     --add-data "vision/templates;vision/templates" ^
     --add-data "locales;locales" ^
     --name "HD2 Undemocratic Tech" ^

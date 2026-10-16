@@ -70,6 +70,10 @@ class BindingPanel(QWidget):
         self.settings_page.cooldown_upgrades_changed.connect(
             self.manager.set_cooldown_upgrades)
         self.settings_page.emit_cooldown_upgrades()
+        orbital_checkbox = self.settings_page.upgrade_checkboxes["orbital_fluctuations"]
+        self.hud_overlay.orbital_button.setChecked(orbital_checkbox.isChecked())
+        self.hud_overlay.orbital_button.toggled.connect(orbital_checkbox.setChecked)
+        orbital_checkbox.toggled.connect(self.hud_overlay.orbital_button.setChecked)
         self.settings_page.save_requested.connect(self.save)
         self.pages.addWidget(self.settings_page)
         layout.addWidget(self.pages)

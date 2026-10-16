@@ -60,6 +60,26 @@ class HUDOverlay(QWidget):
         self.lock_button.setFixedSize(30, 30)
         self.lock_button.toggled.connect(self.set_locked)
         self.row.addWidget(self.lock_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.orbital_button = QToolButton(self)
+        self.orbital_button.setCheckable(True)
+        self.orbital_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.orbital_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.orbital_button.setIcon(QIcon(str(resource_path("ui") / "generic_effect.svg")))
+        self.orbital_button.setIconSize(QSize(30, 30))
+        self.orbital_button.setFixedSize(36, 36)
+        self.orbital_button.setToolTip(tr('modifiers.orbital_fluctuations.name'))
+        self.orbital_button.setAccessibleName(tr('modifiers.orbital_fluctuations.name'))
+        self.orbital_label = QLabel("+25%", self.orbital_button)
+        self.orbital_label.setGeometry(0, 8, 36, 20)
+        self.orbital_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.orbital_label.setStyleSheet(
+            "background-color: rgba(0, 0, 0, 150); color: white; "
+            "font-size: 12px; font-weight: bold;"
+        )
+        self.orbital_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.orbital_label.hide()
+        self.orbital_button.toggled.connect(self.orbital_label.setVisible)
+        self.row.addWidget(self.orbital_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.set_locked(True)
 
     def set_locked(self, locked):
@@ -73,8 +93,8 @@ class HUDOverlay(QWidget):
 
     def update_bindings(self, bindings):
         self.countdown_labels.clear()
-        while self.row.count() > 1:
-            widget = self.row.takeAt(1).widget()
+        while self.row.count() > 2:
+            widget = self.row.takeAt(2).widget()
             widget.hide()
             widget.deleteLater()
         for binding in bindings:
@@ -118,7 +138,7 @@ class HUDOverlay(QWidget):
             self.countdown_labels.setdefault(binding.value, []).append(countdown)
             column.addWidget(visual, 0, Qt.AlignmentFlag.AlignHCenter)
             self.row.addWidget(item)
-        if self.row.count() == 1:
+        if self.row.count() == 2:
             placeholder = QLabel(tr('hud.empty'), self)
             placeholder.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             self.row.addWidget(placeholder)
