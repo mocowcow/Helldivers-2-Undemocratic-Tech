@@ -532,6 +532,14 @@ STRATAGEMS = {
                   "left", "down", "up", "down", "up"],
         cooldown=780,
     ),
+    "TD-110 Maelstrom": Stratagem(
+        name="TD-110 Maelstrom",
+        svg_name="TD-110 Maelstrom.svg",
+        category="Supply Permit", subcategory="Vehicles",
+        sequence=["left", "down", "right", "down",
+                  "left", "down", "up", "left", "right"],
+        cooldown=780,
+    ),
     "EXO-55 Breakthrough Exosuit": Stratagem(
         name="EXO-55 Breakthrough Exosuit",
         svg_name="Breakthrough Exosuit.svg",
