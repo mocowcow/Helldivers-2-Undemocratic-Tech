@@ -14,6 +14,10 @@ A stratagem, chat, and terminal assistant for Helldivers 2.
 
 ## Screenshots
 
+## Terminal arrow recognition
+
+![Terminal arrow recognition](docs/terminal.webp)
+
 ### Hotkey bindings
 
 ![Hotkey binding interface](docs/binding.jpg)

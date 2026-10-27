@@ -14,6 +14,10 @@ Helldivers 2 戰備、聊天、終端輔助工具。
 
 ## 介面截圖
 
+## 終端方向辨識
+
+![終端方向辨識](docs/terminal.webp)
+
 ### 快捷鍵綁定
 
 ![快捷鍵綁定介面](docs/binding.jpg)
