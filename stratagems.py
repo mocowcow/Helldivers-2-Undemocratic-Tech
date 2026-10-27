@@ -233,6 +233,13 @@ STRATAGEMS = {
         sequence=["down", "left", "down", "up", "up", "right"],
         cooldown=480,
     ),
+    "AMW-20 Apex": Stratagem(
+        name="AMW-20 Apex",
+        svg_name="AMW-20 Apex.svg",
+        category="Supply Permit", subcategory="Support Weapons",
+        sequence=["down", "left", "left", "up", "down", "left"],
+        cooldown=480,
+    ),
     "ARC-3 Arc Thrower": Stratagem(
         name="ARC-3 Arc Thrower",
         svg_name="Arc Thrower.svg",
