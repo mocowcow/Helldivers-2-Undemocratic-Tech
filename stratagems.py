@@ -275,6 +275,13 @@ STRATAGEMS = {
         sequence=["down", "down", "up", "down", "down"],
         cooldown=480,
     ),
+    "LAS-44 Nova": Stratagem(
+        name="LAS-44 Nova",
+        svg_name="LAS-44 Nova.svg",
+        category="Supply Permit", subcategory="Support Weapons",
+        sequence=["down", "left", "right", "down", "down"],
+        cooldown=480,
+    ),
     "RS-422 Railgun": Stratagem(
         name="RS-422 Railgun",
         svg_name="Railgun.svg",
